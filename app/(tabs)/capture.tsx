@@ -10,14 +10,14 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   parseReceiptWithRetry,
   validateImage,
 } from '@/services/ai-vision';
-import { createReceipt, updateReceipt } from '@/services/storage';
 import { ProcessingState, Receipt, ReceiptInput } from '@/types/receipt';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   Alert,
@@ -32,11 +32,24 @@ export default function CaptureScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
+  const { addReceipt, updateReceiptById } = useReceipts();
+
   const [state, setState] = useState<ProcessingState>('idle');
   const [capturedImageUri, setCapturedImageUri] = useState<string | null>(null);
   const [processedReceipt, setProcessedReceipt] = useState<Receipt | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+
+  // Reset the success screen when the user leaves the tab, so returning
+  // shows the camera instead of a stale "Receipt Processed!" screen.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setState((current) => (current === 'success' ? 'idle' : current));
+        setShowEditModal(false);
+      };
+    }, [])
+  );
 
   // Handle image capture
   const handleCapture = useCallback(async (imageUri: string) => {
@@ -53,7 +66,7 @@ export default function CaptureScreen() {
         return;
       }
 
-      // Process with Groq Vision API
+      // Extract structured data with the AI vision API
       const result = await parseReceiptWithRetry(imageUri);
 
       // Create receipt input
@@ -74,8 +87,8 @@ export default function CaptureScreen() {
         error_message: result.error_message ?? null,
       };
 
-      // Save to database
-      const savedReceipt = await createReceipt(receiptInput);
+      // Save to database (context keeps dashboard/history in sync)
+      const savedReceipt = await addReceipt(receiptInput);
       setProcessedReceipt(savedReceipt);
       setState('success');
     } catch (error) {
@@ -85,7 +98,7 @@ export default function CaptureScreen() {
       );
       setState('error');
     }
-  }, []);
+  }, [addReceipt]);
 
   // Reset to capture new receipt
   const handleReset = useCallback(() => {
@@ -112,16 +125,15 @@ export default function CaptureScreen() {
     async (updatedReceipt: ReceiptInput) => {
       if (!processedReceipt) return;
 
-      try {
-        const savedReceipt = await updateReceipt(processedReceipt.id, updatedReceipt);
-        if (savedReceipt) {
-          setProcessedReceipt(savedReceipt);
-        }
-      } catch (error) {
-        throw error;
+      const savedReceipt = await updateReceiptById(
+        processedReceipt.id,
+        updatedReceipt
+      );
+      if (savedReceipt) {
+        setProcessedReceipt(savedReceipt);
       }
     },
-    [processedReceipt]
+    [processedReceipt, updateReceiptById]
   );
 
   // Save with error - for cases where image couldn't be parsed
@@ -146,7 +158,7 @@ export default function CaptureScreen() {
         error_message: errorMessage || 'Failed to process receipt',
       };
 
-      const savedReceipt = await createReceipt(receiptInput);
+      const savedReceipt = await addReceipt(receiptInput);
       setProcessedReceipt(savedReceipt);
       setState('success');
 
@@ -158,7 +170,7 @@ export default function CaptureScreen() {
     } catch {
       Alert.alert('Error', 'Failed to save receipt');
     }
-  }, [capturedImageUri, errorMessage]);
+  }, [capturedImageUri, errorMessage, addReceipt]);
 
   // Render based on state
   if (state === 'idle' || state === 'capturing' || state === 'processing') {

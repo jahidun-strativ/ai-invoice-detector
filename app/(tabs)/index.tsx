@@ -3,7 +3,7 @@
  * Home screen with stats, quick actions, and recent receipts
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,78 +11,36 @@ import {
   TouchableOpacity,
   Text,
   RefreshControl,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { ReceiptCard } from '@/components/receipt/receipt-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { INVOICE_TYPE_ICONS } from '@/constants/receipt-ui';
 import { Colors } from '@/constants/theme';
+import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import {
-  getReceiptStats,
-  getRecentReceipts,
-  initDatabase,
-} from '@/services/storage';
-import { Receipt, ReceiptStats, InvoiceType } from '@/types/receipt';
+import { InvoiceType } from '@/types/receipt';
 import { formatCurrency } from '@/utils/format';
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 2;
-
 
 export default function DashboardScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const { width } = useWindowDimensions();
+  const cardWidth = (width - 48) / 2;
 
-  const [stats, setStats] = useState<ReceiptStats | null>(null);
-  const [recentReceipts, setRecentReceipts] = useState<Receipt[]>([]);
+  const { stats, recent: recentReceipts, error, refresh } = useReceipts();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Load dashboard data
-  const loadData = useCallback(async () => {
-    try {
-      const [statsData, receiptsData] = await Promise.all([
-        getReceiptStats(),
-        getRecentReceipts(5),
-      ]);
-      setStats(statsData);
-      setRecentReceipts(receiptsData);
-    } catch {
-      // Dashboard data load failed silently
-    }
-  }, []);
-
-  // Initialize database
-  useEffect(() => {
-    async function init() {
-      await initDatabase();
-      setIsInitialized(true);
-      await loadData();
-    }
-    init();
-  }, [loadData]);
-
-  // Reload when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      if (isInitialized) {
-        loadData();
-      }
-    }, [isInitialized, loadData])
-  );
 
   // Handle refresh
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await loadData();
+    await refresh();
     setIsRefreshing(false);
-  }, [loadData]);
+  }, [refresh]);
 
-  // Format currency
   return (
     <ThemedView style={styles.container}>
       <ScrollView
@@ -112,13 +70,21 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Load error */}
+        {error && (
+          <View style={[styles.errorBanner, { backgroundColor: colors.danger + '20' }]}>
+            <IconSymbol name="exclamationmark.triangle.fill" size={18} color={colors.danger} />
+            <Text style={[styles.errorBannerText, { color: colors.danger }]}>{error}</Text>
+          </View>
+        )}
+
         {/* Quick Stats Cards */}
         <View style={styles.statsGrid}>
           {/* Total Receipts */}
           <View
             style={[
               styles.statCard,
-              { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
+              { width: cardWidth, backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
             ]}
           >
             <View style={[styles.statIcon, { backgroundColor: colorScheme === 'dark' ? '#1E3A5F' : '#E3F2FD' }]}>
@@ -136,7 +102,7 @@ export default function DashboardScreen() {
           <View
             style={[
               styles.statCard,
-              { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
+              { width: cardWidth, backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
             ]}
           >
             <View style={[styles.statIcon, { backgroundColor: colorScheme === 'dark' ? '#1B3D2F' : '#E8F5E9' }]}>
@@ -317,8 +283,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
   },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+  },
   statCard: {
-    width: CARD_WIDTH,
     padding: 16,
     borderRadius: 16,
     alignItems: 'flex-start',

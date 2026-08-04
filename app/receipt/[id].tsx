@@ -9,9 +9,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { exportAndShare } from '@/services/export';
-import { deleteReceipt, getReceiptById, updateReceipt } from '@/services/storage';
+import { getReceiptById } from '@/services/storage';
 import { Receipt, ReceiptInput } from '@/types/receipt';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -33,6 +34,8 @@ export default function ReceiptDetailScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
+  const { receipts, recent, removeReceipt, updateReceiptById } = useReceipts();
+
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
@@ -40,12 +43,21 @@ export default function ReceiptDetailScreen() {
   const [showJsonPreview, setShowJsonPreview] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  // Load receipt
+  // Load receipt: prefer the copy already in context, fall back to the DB
+  // (e.g. deep links or receipts outside the current filter).
   useEffect(() => {
     async function loadReceipt() {
       if (!id) {
         Alert.alert('Error', 'Receipt ID not found');
         router.back();
+        return;
+      }
+
+      const cached =
+        receipts.find((r) => r.id === id) ?? recent.find((r) => r.id === id);
+      if (cached) {
+        setReceipt(cached);
+        setIsLoading(false);
         return;
       }
 
@@ -66,6 +78,9 @@ export default function ReceiptDetailScreen() {
     }
 
     loadReceipt();
+    // Intentionally keyed on id only: context list churn must not re-trigger
+    // load (and would fight local edits before the refresh lands).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Handle export
@@ -104,7 +119,7 @@ export default function ReceiptDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteReceipt(receipt.id);
+              await removeReceipt(receipt.id);
               Alert.alert('Deleted', 'Receipt has been deleted');
               router.back();
             } catch {
@@ -114,23 +129,19 @@ export default function ReceiptDetailScreen() {
         },
       ]
     );
-  }, [receipt]);
+  }, [receipt, removeReceipt]);
 
   // Handle save edited receipt
   const handleSaveEditedReceipt = useCallback(
     async (updatedReceipt: ReceiptInput) => {
       if (!receipt) return;
 
-      try {
-        const savedReceipt = await updateReceipt(receipt.id, updatedReceipt);
-        if (savedReceipt) {
-          setReceipt(savedReceipt);
-        }
-      } catch (error) {
-        throw error;
+      const savedReceipt = await updateReceiptById(receipt.id, updatedReceipt);
+      if (savedReceipt) {
+        setReceipt(savedReceipt);
       }
     },
-    [receipt]
+    [receipt, updateReceiptById]
   );
 
   // Format receipt as JSON for preview (excluding image_uri for cleaner view)

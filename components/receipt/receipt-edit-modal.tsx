@@ -122,13 +122,13 @@ export function ReceiptEditModal({
     setFormData({ ...formData, items: updatedItems });
   };
 
-  const calculateTotals = () => {
-    if (!formData) return;
-    const itemsTotal = formData.items.reduce((sum, item) => sum + (item.price || 0), 0);
-    const subtotal = formData.subtotal ?? itemsTotal;
-    const tax = formData.tax ?? 0;
-    const total = subtotal + tax;
-    setFormData({ ...formData, subtotal, tax, total });
+  // Pure: derive subtotal/total from a draft, so functional updates never
+  // read a stale closure and clobber the digit the user just typed.
+  const withTotals = (draft: ReceiptInput): ReceiptInput => {
+    const itemsTotal = draft.items.reduce((sum, item) => sum + (item.price || 0), 0);
+    const subtotal = draft.subtotal ?? itemsTotal;
+    const tax = draft.tax ?? 0;
+    return { ...draft, subtotal, tax, total: subtotal + tax };
   };
 
   return (
@@ -264,8 +264,9 @@ export function ReceiptEditModal({
                 value={formData.subtotal?.toString() || ''}
                 onChangeText={(text) => {
                   const num = parseFloat(text) || null;
-                  updateField('subtotal', num);
-                  calculateTotals();
+                  setFormData((prev) =>
+                    prev ? withTotals({ ...prev, subtotal: num }) : prev
+                  );
                 }}
                 keyboardType="decimal-pad"
                 placeholder="0.00"
@@ -280,8 +281,9 @@ export function ReceiptEditModal({
                 value={formData.tax?.toString() || ''}
                 onChangeText={(text) => {
                   const num = parseFloat(text) || null;
-                  updateField('tax', num);
-                  calculateTotals();
+                  setFormData((prev) =>
+                    prev ? withTotals({ ...prev, tax: num }) : prev
+                  );
                 }}
                 keyboardType="decimal-pad"
                 placeholder="0.00"
@@ -370,8 +372,13 @@ export function ReceiptEditModal({
                           value={item.price.toString()}
                           onChangeText={(text) => {
                             const num = parseFloat(text) || 0;
-                            updateItem(index, 'price', num);
-                            calculateTotals();
+                            setFormData((prev) => {
+                              if (!prev) return prev;
+                              const items = [...prev.items];
+                              items[index] = { ...items[index], price: num };
+                              // Recompute from items only when subtotal was derived
+                              return withTotals({ ...prev, items });
+                            });
                           }}
                           keyboardType="decimal-pad"
                           placeholder="0.00"

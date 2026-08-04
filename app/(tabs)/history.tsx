@@ -3,7 +3,7 @@
  * List of processed receipts with filtering and search
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -15,22 +15,17 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { ReceiptCard } from '@/components/receipt/receipt-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import {
-  getReceipts,
-  deleteReceipt,
-  searchReceipts,
-  initDatabase,
-} from '@/services/storage';
 import { exportAndShare } from '@/services/export';
 import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
-import { Receipt, InvoiceType, ReceiptFilter } from '@/types/receipt';
+import { Receipt, InvoiceType } from '@/types/receipt';
 
 const INVOICE_TYPES: { label: string; value: InvoiceType | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -43,71 +38,50 @@ export default function HistoryScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { receipts, filter, status, setFilter, refresh, removeReceipt } =
+    useReceipts();
+  const selectedType = filter.type;
+
+  const [searchQuery, setSearchQuery] = useState(filter.searchQuery);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState<InvoiceType | 'all'>('all');
   const [isExporting, setIsExporting] = useState(false);
 
-  // Load receipts with current filter
-  const loadReceipts = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const filter: ReceiptFilter | undefined =
-        selectedType !== 'all' ? { invoice_type: selectedType } : undefined;
-      const data = await getReceipts(filter);
-      setReceipts(data);
-    } catch {
-      Alert.alert('Error', 'Failed to load receipts');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedType]);
-
-  // Initialize database and load receipts on mount
+  // Debounce search input into the shared filter (300ms)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    async function init() {
-      await initDatabase();
-      await loadReceipts();
-    }
-    init();
-  }, [loadReceipts]);
-
-  // Reload when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      loadReceipts();
-    }, [loadReceipts])
-  );
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   // Handle refresh
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await loadReceipts();
+    await refresh();
     setIsRefreshing(false);
-  }, [loadReceipts]);
+  }, [refresh]);
 
   // Handle search
-  const handleSearch = useCallback(async (query: string) => {
-    setSearchQuery(query);
-    if (query.trim()) {
-      try {
-        const results = await searchReceipts(query.trim());
-        setReceipts(results);
-      } catch {
-        // Search failed silently
-      }
-    } else {
-      loadReceipts();
-    }
-  }, [loadReceipts]);
+  const handleSearch = useCallback(
+    (query: string) => {
+      setSearchQuery(query);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        setFilter({ searchQuery: query });
+      }, 300);
+    },
+    [setFilter]
+  );
 
   // Handle type filter change
-  const handleTypeChange = useCallback((type: InvoiceType | 'all') => {
-    setSelectedType(type);
-    setSearchQuery('');
-  }, []);
+  const handleTypeChange = useCallback(
+    (type: InvoiceType | 'all') => {
+      setSearchQuery('');
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      setFilter({ type, searchQuery: '' });
+    },
+    [setFilter]
+  );
 
   // Handle delete receipt
   const handleDelete = useCallback(
@@ -122,8 +96,7 @@ export default function HistoryScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
-                await deleteReceipt(receiptId);
-                setReceipts((prev) => prev.filter((r) => r.id !== receiptId));
+                await removeReceipt(receiptId);
               } catch {
                 Alert.alert('Error', 'Failed to delete receipt');
               }
@@ -132,7 +105,7 @@ export default function HistoryScreen() {
         ]
       );
     },
-    []
+    [removeReceipt]
   );
 
   // Handle export all
@@ -283,8 +256,9 @@ export default function HistoryScreen() {
         </Text>
       </View>
 
-      {/* Receipt List */}
-      {isLoading && !isRefreshing ? (
+      {/* Receipt List — keep the last list rendered during background
+          refreshes; only the very first load shows a spinner */}
+      {status === 'initializing' ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.tint} />
         </View>
