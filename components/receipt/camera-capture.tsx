@@ -15,6 +15,7 @@ import {
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -32,6 +33,7 @@ export function CameraCapture({
 }: CameraCaptureProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
@@ -135,7 +137,7 @@ export function CameraCapture({
           />
         </View>
 
-        <View style={styles.previewActions}>
+        <View style={[styles.previewActions, { paddingBottom: insets.bottom + 16 }]}>
           {isProcessing ? (
             <View style={styles.processingContainer}>
               <ActivityIndicator size="large" color={colors.tint} />
@@ -176,7 +178,7 @@ export function CameraCapture({
         facing={facing}
       >
         {/* Top controls */}
-        <View style={styles.topControls}>
+        <View style={[styles.topControls, { paddingTop: insets.top + 12 }]}>
           {onCancel && (
             <TouchableOpacity style={styles.topButton} onPress={onCancel}>
               <IconSymbol name="xmark" size={28} color="#fff" />
@@ -200,7 +202,7 @@ export function CameraCapture({
         </View>
 
         {/* Bottom controls */}
-        <View style={styles.bottomControls}>
+        <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 24 }]}>
           <TouchableOpacity style={styles.galleryButton} onPress={pickImage}>
             <IconSymbol name="photo.on.rectangle" size={32} color="#fff" />
           </TouchableOpacity>
@@ -268,7 +270,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 60,
     paddingHorizontal: 20,
   },
   topButton: {
@@ -333,7 +334,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingBottom: 50,
     paddingHorizontal: 20,
   },
   galleryButton: {

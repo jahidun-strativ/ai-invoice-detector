@@ -29,10 +29,12 @@ import {
   View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CaptureScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
 
   const { addReceipt, updateReceiptById } = useReceipts();
 
@@ -190,7 +192,7 @@ export default function CaptureScreen() {
   if (state === 'error') {
     return (
       <ThemedView style={styles.container}>
-        <View style={styles.errorContainer}>
+        <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
           <IconSymbol
             name="exclamationmark.triangle.fill"
             size={64}
@@ -228,7 +230,10 @@ export default function CaptureScreen() {
   if (state === 'success' && processedReceipt) {
     return (
       <ThemedView style={styles.container}>
-        <Animated.View entering={FadeInDown.duration(400)} style={styles.successHeader}>
+        <Animated.View
+          entering={FadeInDown.duration(400)}
+          style={[styles.successHeader, { paddingTop: insets.top + 12 }]}
+        >
           <IconSymbol name="checkmark.circle.fill" size={32} color={colors.success} />
           <ThemedText style={styles.successTitle}>Receipt Processed!</ThemedText>
         </Animated.View>
@@ -308,7 +313,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 60,
     paddingBottom: 16,
     gap: 12,
   },

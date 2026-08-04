@@ -17,6 +17,7 @@ import {
   Platform,
   Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { Colors } from '@/constants/theme';
@@ -155,7 +156,10 @@ export function ReceiptEditModal({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -432,7 +436,7 @@ export function ReceiptEditModal({
           </View>
         </ScrollView>
         </KeyboardAvoidingView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }

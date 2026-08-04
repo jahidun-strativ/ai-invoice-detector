@@ -318,6 +318,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 30,
+    lineHeight: 38,
     fontWeight: '800',
     letterSpacing: -0.5,
   },

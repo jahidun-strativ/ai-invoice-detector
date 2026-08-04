@@ -28,12 +28,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ReceiptDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
 
   const { receipts, recent, removeReceipt, updateReceiptById } = useReceipts();
 
@@ -200,7 +201,7 @@ export default function ReceiptDetailScreen() {
           }}
         />
         <TouchableOpacity
-          style={styles.fullImageClose}
+          style={[styles.fullImageClose, { top: insets.top + 12 }]}
           onPress={() => setShowFullImage(false)}
         >
           <IconSymbol name="xmark" size={28} color="#fff" />
@@ -320,7 +321,12 @@ export default function ReceiptDetailScreen() {
       </Modal>
 
       {/* Action Buttons */}
-      <View style={[styles.actionsContainer, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.actionsContainer,
+          { backgroundColor: colors.background, paddingBottom: insets.bottom + 12 },
+        ]}
+      >
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: colors.success }]}
           onPress={() => handleExport('json')}
@@ -426,7 +432,6 @@ const styles = StyleSheet.create({
   },
   fullImageClose: {
     position: 'absolute',
-    top: 60,
     right: 20,
     zIndex: 10,
     width: 44,
