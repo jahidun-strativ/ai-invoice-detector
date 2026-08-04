@@ -42,16 +42,17 @@ export function useOTAUpdates(options: {
   });
 
   /**
-   * Check if updates are enabled
+   * OTA checks are unsupported in development builds.
+   * We gate with both Updates.isEnabled and !__DEV__.
    */
-  const isEnabled = Updates.isEnabled;
+  const isEnabled = Updates.isEnabled && !__DEV__;
 
   /**
    * Check for available updates
    */
   const checkForUpdate = useCallback(async (): Promise<boolean> => {
     if (!isEnabled) {
-      console.log('[OTA] Updates are not enabled in this environment');
+      console.log('[OTA] Skipping update check (disabled or development build)');
       return false;
     }
 
@@ -78,6 +79,18 @@ export function useOTAUpdates(options: {
       }
     } catch (error) {
       const updateError = error instanceof Error ? error : new Error(String(error));
+
+      // In some runtimes this API can still be unavailable; treat it as non-fatal.
+      if (updateError.message.includes('not supported in development builds')) {
+        console.log('[OTA] Update check skipped in development build');
+        setState((prev) => ({
+          ...prev,
+          isChecking: false,
+          error: null,
+        }));
+        return false;
+      }
+
       console.error('[OTA] Error checking for update:', updateError);
       setState((prev) => ({
         ...prev,

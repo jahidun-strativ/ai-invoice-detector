@@ -1,20 +1,23 @@
-
-import * as FileSystem from 'expo-file-system/legacy';
-import { Image as RNImage } from 'react-native';
+import * as FileSystem from "expo-file-system/legacy";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
+import { Image as RNImage } from "react-native";
 import {
   GroqReceiptResponse,
   ImageProcessingResult,
   InvoiceType,
-} from '../types/receipt';
+} from "../types/receipt";
 
 // Groq API configuration
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL_ID = 'meta-llama/llama-4-scout-17b-16e-instruct';
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL_ID = "openai/gpt-oss-20b";
 
 // Image constraints from Groq API
 const MAX_BASE64_SIZE = 4 * 1024 * 1024; // 4MB
-const MAX_IMAGE_DIMENSION = 2048;
-const JPEG_QUALITY = 0.8;
+const TARGET_IMAGE_DIMENSION = 2048; // Target size for optimal OCR quality (max 2048px per Groq API)
+const JPEG_QUALITY = 0.92; // Higher quality for better text recognition
+const RETRY_BASE_DELAY_MS = 1000;
+const MIN_ACCEPTABLE_CONFIDENCE = 0.45;
+const MATH_TOLERANCE = 2;
 
 /**
  * Get Groq API key from environment
@@ -24,7 +27,9 @@ function getApiKey(): string {
   const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
 
   if (!apiKey) {
-    throw new Error('GROQ_API_KEY not found. Please set EXPO_PUBLIC_GROQ_API_KEY or GROQ_API_KEY.');
+    throw new Error(
+      "GROQ_API_KEY not found. Please set EXPO_PUBLIC_GROQ_API_KEY or GROQ_API_KEY.",
+    );
   }
   return apiKey;
 }
@@ -151,69 +156,176 @@ Rules:
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
+const HARD_HANDWRITING_FOLLOWUP_PROMPT = `${EXTRACTION_PROMPT}
+
+SECOND PASS (HIGH PRIORITY):
+- Re-read the image with extra focus on messy handwriting and faint Bangla numerals.
+- Prioritize total, subtotal, tax, quantity, and line item prices.
+- If text is unreadable, return null for that field instead of guessing.
+- Never return Bangla digits in numeric fields.`;
+
+const BANGLA_DIGIT_MAP: Record<string, string> = {
+  "০": "0",
+  "১": "1",
+  "২": "2",
+  "৩": "3",
+  "৪": "4",
+  "৫": "5",
+  "৬": "6",
+  "৭": "7",
+  "৮": "8",
+  "৯": "9",
+};
+
 /**
  * Get image dimensions
  */
 async function getImageDimensions(
-  uri: string
+  uri: string,
 ): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     RNImage.getSize(
       uri,
       (width, height) => resolve({ width, height }),
-      (error) => reject(error)
+      (error) => reject(error),
     );
   });
 }
 
 /**
  * Process and resize image for API upload
+ * Optimizes image for OCR by resizing, converting to JPEG, and compressing
  */
 export async function processImageForUpload(
-  imageUri: string
+  imageUri: string,
 ): Promise<ImageProcessingResult> {
   // Read the original file
   const fileInfo = await FileSystem.getInfoAsync(imageUri);
 
   if (!fileInfo.exists) {
-    throw new Error('Image file not found');
+    throw new Error("Image file not found");
   }
 
   // Get original dimensions
   const dimensions = await getImageDimensions(imageUri);
-  let { width, height } = dimensions;
+  const { width: originalWidth, height: originalHeight } = dimensions;
+  const maxDimension = Math.max(originalWidth, originalHeight);
 
-  // Calculate resize ratio if needed
-  const maxDimension = Math.max(width, height);
-  let resizeRatio = 1;
+  // Calculate resize dimensions if needed
+  // For OCR, we want to preserve as much detail as possible while staying within limits
+  let targetWidth = originalWidth;
+  let targetHeight = originalHeight;
 
-  if (maxDimension > MAX_IMAGE_DIMENSION) {
-    resizeRatio = MAX_IMAGE_DIMENSION / maxDimension;
-    width = Math.round(width * resizeRatio);
-    height = Math.round(height * resizeRatio);
+  if (maxDimension > TARGET_IMAGE_DIMENSION) {
+    const scale = TARGET_IMAGE_DIMENSION / maxDimension;
+    targetWidth = Math.round(originalWidth * scale);
+    targetHeight = Math.round(originalHeight * scale);
   }
 
-  // Read as base64
-  let base64 = await FileSystem.readAsStringAsync(imageUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  // Use manipulateAsync to resize and optimize the image
+  // Note: manipulateAsync is deprecated but still functional
+  // This ensures proper JPEG encoding and compression
+  const manipulatedImage = await manipulateAsync(
+    imageUri,
+    [
+      {
+        resize: {
+          width: targetWidth,
+          height: targetHeight,
+        },
+      },
+    ],
+    {
+      compress: JPEG_QUALITY,
+      format: SaveFormat.JPEG,
+      base64: true, // Get base64 directly from manipulator
+    },
+  );
 
-  // Check size - if too large, we need to handle it
-  // Note: In a full implementation, you would use expo-image-manipulator
-  // to resize the image. For now, we'll throw an error if too large.
-  const base64Size = base64.length * 0.75; // Approximate decoded size
+  if (!manipulatedImage.base64) {
+    throw new Error("Failed to process image");
+  }
 
+  // Check the actual base64 size
+  // Base64 encoding increases size by ~33%, so we check the encoded size
+  const base64Size = (manipulatedImage.base64.length * 3) / 4; // Approximate decoded size
+
+  // If still too large, reduce quality and try again
   if (base64Size > MAX_BASE64_SIZE) {
-    throw new Error(
-      `Image too large (${Math.round(base64Size / 1024 / 1024)}MB). Maximum size is 4MB. Please use a smaller image.`
+    // Try with lower quality
+    const compressedImage = await manipulateAsync(
+      imageUri,
+      [
+        {
+          resize: {
+            width: targetWidth,
+            height: targetHeight,
+          },
+        },
+      ],
+      {
+        compress: 0.75, // Lower quality
+        format: SaveFormat.JPEG,
+        base64: true,
+      },
     );
+
+    if (!compressedImage.base64) {
+      throw new Error("Failed to compress image");
+    }
+
+    const compressedSize = (compressedImage.base64.length * 3) / 4;
+
+    if (compressedSize > MAX_BASE64_SIZE) {
+      // Last resort: reduce dimensions further
+      const finalScale = Math.sqrt(MAX_BASE64_SIZE / compressedSize) * 0.9; // 90% to be safe
+      const finalWidth = Math.round(targetWidth * finalScale);
+      const finalHeight = Math.round(targetHeight * finalScale);
+
+      const finalImage = await manipulateAsync(
+        imageUri,
+        [
+          {
+            resize: {
+              width: finalWidth,
+              height: finalHeight,
+            },
+          },
+        ],
+        {
+          compress: 0.75,
+          format: SaveFormat.JPEG,
+          base64: true,
+        },
+      );
+
+      if (!finalImage.base64) {
+        throw new Error("Failed to process image after compression");
+      }
+
+      return {
+        uri: finalImage.uri,
+        base64: finalImage.base64,
+        width: finalWidth,
+        height: finalHeight,
+        fileSize: (finalImage.base64.length * 3) / 4,
+      };
+    }
+
+    return {
+      uri: compressedImage.uri,
+      base64: compressedImage.base64,
+      width: targetWidth,
+      height: targetHeight,
+      fileSize: compressedSize,
+    };
   }
 
   return {
-    uri: imageUri,
-    base64,
-    width,
-    height,
+    uri: manipulatedImage.uri,
+    base64: manipulatedImage.base64,
+    width: targetWidth,
+    height: targetHeight,
     fileSize: base64Size,
   };
 }
@@ -222,34 +334,39 @@ export async function processImageForUpload(
  * Parse receipt image using Groq Vision API
  */
 export async function parseReceipt(
-  imageUri: string
+  imageUri: string,
+  options?: {
+    prompt?: string;
+    processedImage?: ImageProcessingResult;
+  },
 ): Promise<GroqReceiptResponse> {
   try {
-    // Process image
-    const processedImage = await processImageForUpload(imageUri);
+    // Process image once and optionally reuse across retries
+    const processedImage =
+      options?.processedImage ?? (await processImageForUpload(imageUri));
 
     // Get API key
     const apiKey = getApiKey();
 
     // Prepare the request
     const response = await fetch(GROQ_API_URL, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: MODEL_ID,
         messages: [
           {
-            role: 'user',
+            role: "user",
             content: [
               {
-                type: 'text',
-                text: EXTRACTION_PROMPT,
+                type: "text",
+                text: options?.prompt ?? EXTRACTION_PROMPT,
               },
               {
-                type: 'image_url',
+                type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${processedImage.base64}`,
                 },
@@ -259,14 +376,14 @@ export async function parseReceipt(
         ],
         temperature: 0.0, // Zero temperature to minimize hallucinations and ensure accuracy
         max_completion_tokens: 2048,
-        response_format: { type: 'json_object' },
+        response_format: { type: "json_object" },
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
-        `Groq API error: ${response.status} - ${errorData.error?.message || response.statusText}`
+        `Groq API error: ${response.status} - ${errorData.error?.message || response.statusText}`,
       );
     }
 
@@ -274,30 +391,33 @@ export async function parseReceipt(
     const content = data.choices?.[0]?.message?.content;
 
     if (!content) {
-      throw new Error('No response from Groq API');
+      throw new Error("No response from Groq API");
     }
 
     // Parse the JSON response
     const parsed = JSON.parse(content) as GroqReceiptResponse;
 
     // Validate and normalize the response
-    return normalizeResponse(parsed);
+    return normalizeResponse({
+      ...parsed,
+      raw_text: content,
+    });
   } catch (error) {
     // Return error response
     return {
       merchant_name: null,
       receipt_date: null,
       receipt_number: null,
-      invoice_type: 'unknown',
+      invoice_type: "unknown",
       items: [],
       subtotal: null,
       tax: null,
       total: null,
-      currency: 'BDT',
+      currency: "BDT",
       payment_method: null,
       confidence_score: 0,
       error_message:
-        error instanceof Error ? error.message : 'Unknown error occurred',
+        error instanceof Error ? error.message : "Unknown error occurred",
     };
   }
 }
@@ -307,43 +427,86 @@ export async function parseReceipt(
  */
 export async function parseReceiptWithRetry(
   imageUri: string,
-  maxRetries: number = 3
+  maxRetries: number = 3,
 ): Promise<GroqReceiptResponse> {
   let lastError: Error | null = null;
+  let bestResult: GroqReceiptResponse | null = null;
+
+  let processedImage: ImageProcessingResult;
+  try {
+    processedImage = await processImageForUpload(imageUri);
+  } catch (error) {
+    return {
+      merchant_name: null,
+      receipt_date: null,
+      receipt_number: null,
+      invoice_type: "unknown",
+      items: [],
+      subtotal: null,
+      tax: null,
+      total: null,
+      currency: "BDT",
+      payment_method: null,
+      confidence_score: 0,
+      error_message:
+        error instanceof Error ? error.message : "Failed to process image",
+    };
+  }
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const result = await parseReceipt(imageUri);
+      const prompt =
+        attempt === 1 ? EXTRACTION_PROMPT : HARD_HANDWRITING_FOLLOWUP_PROMPT;
+      const result = await parseReceipt(imageUri, {
+        prompt,
+        processedImage,
+      });
 
-      // If we got a result (even with error_message), return it
-      if (result.total !== null || result.error_message) {
+      if (
+        !bestResult ||
+        calculateExtractionScore(result) > calculateExtractionScore(bestResult)
+      ) {
+        bestResult = result;
+      }
+
+      if (shouldAcceptExtraction(result)) {
         return result;
       }
 
-      // If total is null and no error, retry
-      lastError = new Error('Failed to extract receipt total');
+      lastError = new Error(
+        result.error_message || "Low-confidence extraction result",
+      );
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-
-      // Wait before retry with exponential backoff
-      if (attempt < maxRetries) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.pow(2, attempt) * 1000)
-        );
-      }
     }
+
+    // Wait before retry with exponential backoff
+    if (attempt < maxRetries) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.pow(2, attempt) * RETRY_BASE_DELAY_MS),
+      );
+    }
+  }
+
+  if (bestResult) {
+    return {
+      ...bestResult,
+      error_message:
+        bestResult.error_message ||
+        `Low confidence after ${maxRetries} attempts. Please review extracted fields.`,
+    };
   }
 
   return {
     merchant_name: null,
     receipt_date: null,
     receipt_number: null,
-    invoice_type: 'unknown',
+    invoice_type: "unknown",
     items: [],
     subtotal: null,
     tax: null,
     total: null,
-    currency: 'BDT',
+    currency: "BDT",
     payment_method: null,
     confidence_score: 0,
     error_message: `Failed after ${maxRetries} attempts: ${lastError?.message}`,
@@ -356,51 +519,50 @@ export async function parseReceiptWithRetry(
 function normalizeResponse(response: GroqReceiptResponse): GroqReceiptResponse {
   // Normalize invoice type
   const validTypes: InvoiceType[] = [
-    'retail',
-    'restaurant',
-    'utility',
-    'service',
-    'unknown',
+    "retail",
+    "restaurant",
+    "utility",
+    "service",
+    "unknown",
   ];
   const invoiceType = validTypes.includes(response.invoice_type as InvoiceType)
     ? (response.invoice_type as InvoiceType)
-    : 'unknown';
+    : "unknown";
 
   // Normalize items
   const items = Array.isArray(response.items)
     ? response.items.map((item) => ({
-        name: String(item.name || 'Unknown Item'),
-        quantity:
-          typeof item.quantity === 'number' ? item.quantity : null,
-        price: typeof item.price === 'number' ? item.price : 0,
+        name: String(item.name || "Unknown Item"),
+        quantity: parseNumericValue(item.quantity),
+        price: parseNumericValue(item.price) ?? 0,
       }))
     : [];
 
   // Normalize date to ISO format
-  let receiptDate = response.receipt_date;
-  if (receiptDate) {
-    try {
-      const date = new Date(receiptDate);
-      if (!isNaN(date.getTime())) {
-        receiptDate = date.toISOString().split('T')[0];
-      } else {
-        receiptDate = null;
-      }
-    } catch {
-      receiptDate = null;
-    }
-  }
+  const receiptDate = normalizeDateToIso(response.receipt_date);
 
   // Normalize currency
-  const currency = response.currency?.toUpperCase() || 'BDT';
+  const currency = response.currency?.toUpperCase() || "BDT";
 
   // Normalize confidence score
   let confidenceScore = response.confidence_score;
-  if (typeof confidenceScore !== 'number' || confidenceScore < 0) {
+  if (typeof confidenceScore !== "number" || confidenceScore < 0) {
     confidenceScore = 0;
   } else if (confidenceScore > 1) {
     confidenceScore = confidenceScore > 100 ? 1 : confidenceScore / 100;
   }
+
+  const subtotal = parseNumericValue(response.subtotal);
+  const tax = parseNumericValue(response.tax);
+  const total = parseNumericValue(response.total);
+  confidenceScore = calibrateConfidenceScore({
+    confidenceScore,
+    hasMerchant: Boolean(response.merchant_name),
+    hasItems: items.length > 0,
+    hasTotal: total !== null,
+    hasMathConsistency: isMathConsistent(subtotal, tax, total),
+    hasError: Boolean(response.error_message),
+  });
 
   return {
     merchant_name: response.merchant_name || null,
@@ -408,34 +570,177 @@ function normalizeResponse(response: GroqReceiptResponse): GroqReceiptResponse {
     receipt_number: response.receipt_number || null,
     invoice_type: invoiceType,
     items,
-    subtotal:
-      typeof response.subtotal === 'number' ? response.subtotal : null,
-    tax: typeof response.tax === 'number' ? response.tax : null,
-    total: typeof response.total === 'number' ? response.total : null,
+    subtotal,
+    tax,
+    total,
     currency,
     payment_method: response.payment_method || null,
     confidence_score: confidenceScore,
     error_message: response.error_message || null,
+    raw_text: response.raw_text || null,
   };
+}
+
+function parseNumericValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalizedDigits = convertBanglaDigits(value).trim();
+  if (!normalizedDigits) {
+    return null;
+  }
+
+  const cleaned = normalizedDigits
+    .replace(/[, ]+/g, "")
+    .replace(/[^\d.-]/g, "");
+
+  if (!cleaned || cleaned === "-" || cleaned === "." || cleaned === "-.") {
+    return null;
+  }
+
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function convertBanglaDigits(value: string): string {
+  return value.replace(/[০-৯]/g, (digit) => BANGLA_DIGIT_MAP[digit] ?? digit);
+}
+
+function normalizeDateToIso(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = convertBanglaDigits(value).trim();
+  const ymdMatch = normalized.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/);
+  if (ymdMatch) {
+    return formatDate(ymdMatch[1], ymdMatch[2], ymdMatch[3]);
+  }
+
+  const dmyMatch = normalized.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+  if (dmyMatch) {
+    const year = dmyMatch[3].length === 2 ? `20${dmyMatch[3]}` : dmyMatch[3];
+    return formatDate(year, dmyMatch[2], dmyMatch[1]);
+  }
+
+  const parsed = new Date(normalized);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split("T")[0];
+  }
+
+  return null;
+}
+
+function formatDate(year: string, month: string, day: string): string | null {
+  const yyyy = Number(year);
+  const mm = Number(month);
+  const dd = Number(day);
+
+  if (
+    !Number.isInteger(yyyy) ||
+    !Number.isInteger(mm) ||
+    !Number.isInteger(dd) ||
+    yyyy < 1900 ||
+    yyyy > 2100 ||
+    mm < 1 ||
+    mm > 12 ||
+    dd < 1 ||
+    dd > 31
+  ) {
+    return null;
+  }
+
+  const iso = `${yyyy.toString().padStart(4, "0")}-${mm
+    .toString()
+    .padStart(2, "0")}-${dd.toString().padStart(2, "0")}`;
+  const parsed = new Date(`${iso}T00:00:00Z`);
+  return !isNaN(parsed.getTime()) ? iso : null;
+}
+
+function isMathConsistent(
+  subtotal: number | null,
+  tax: number | null,
+  total: number | null,
+): boolean {
+  if (total === null || subtotal === null) {
+    return false;
+  }
+
+  const expected = subtotal + (tax ?? 0);
+  return Math.abs(expected - total) <= MATH_TOLERANCE;
+}
+
+function calibrateConfidenceScore(input: {
+  confidenceScore: number;
+  hasMerchant: boolean;
+  hasItems: boolean;
+  hasTotal: boolean;
+  hasMathConsistency: boolean;
+  hasError: boolean;
+}): number {
+  let score = input.confidenceScore;
+
+  if (input.hasMerchant) score += 0.03;
+  if (input.hasItems) score += 0.07;
+  if (input.hasTotal) score += 0.1;
+  if (input.hasMathConsistency) score += 0.05;
+  if (!input.hasTotal) score -= 0.25;
+  if (input.hasError) score -= 0.2;
+
+  return Math.max(0, Math.min(1, score));
+}
+
+function shouldAcceptExtraction(response: GroqReceiptResponse): boolean {
+  if (response.error_message && response.total === null) {
+    return false;
+  }
+
+  if (response.total === null) {
+    return false;
+  }
+
+  if (response.confidence_score >= MIN_ACCEPTABLE_CONFIDENCE) {
+    return true;
+  }
+
+  const hasCoreData =
+    Boolean(response.merchant_name) || response.items.length > 0;
+  return hasCoreData && response.confidence_score >= 0.3;
+}
+
+function calculateExtractionScore(response: GroqReceiptResponse): number {
+  let score = response.confidence_score * 100;
+  if (response.total !== null) score += 60;
+  if (response.items.length > 0) score += 20;
+  if (response.merchant_name) score += 10;
+  if (response.receipt_date) score += 5;
+  if (response.error_message) score -= 40;
+  return score;
 }
 
 /**
  * Validate if an image is suitable for processing
  */
 export async function validateImage(
-  imageUri: string
+  imageUri: string,
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     const fileInfo = await FileSystem.getInfoAsync(imageUri);
 
     if (!fileInfo.exists) {
-      return { valid: false, error: 'Image file not found' };
+      return { valid: false, error: "Image file not found" };
     }
 
     // Check file size (rough estimate) - size is available on existant files
-    const size = (fileInfo as FileSystem.FileInfo & { size?: number }).size || 0;
+    const size =
+      (fileInfo as FileSystem.FileInfo & { size?: number }).size || 0;
     if (size > 20 * 1024 * 1024) {
-      return { valid: false, error: 'Image file is too large (max 20MB)' };
+      return { valid: false, error: "Image file is too large (max 20MB)" };
     }
 
     // Check dimensions
@@ -445,7 +750,7 @@ export async function validateImage(
     if (totalPixels > 33177600) {
       return {
         valid: false,
-        error: 'Image resolution too high (max 33 megapixels)',
+        error: "Image resolution too high (max 33 megapixels)",
       };
     }
 
@@ -454,7 +759,7 @@ export async function validateImage(
     return {
       valid: false,
       error:
-        error instanceof Error ? error.message : 'Failed to validate image',
+        error instanceof Error ? error.message : "Failed to validate image",
     };
   }
 }
