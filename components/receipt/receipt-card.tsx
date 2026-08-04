@@ -35,8 +35,12 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
     <TouchableOpacity
       style={[
         styles.container,
-        { backgroundColor: colors.background },
-        hasError && styles.errorContainer,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+          borderWidth: StyleSheet.hairlineWidth,
+        },
+        hasError && { borderColor: colors.danger, borderWidth: 1 },
       ]}
       onPress={onPress}
       activeOpacity={0.7}
@@ -47,6 +51,8 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
           source={{ uri: receipt.image_uri }}
           style={styles.thumbnail}
           contentFit="cover"
+          transition={200}
+          placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
         />
         <View style={[styles.typeBadge, { backgroundColor: typeColor }]}>
           <IconSymbol name={typeIcon} size={14} color="#fff" />
@@ -66,7 +72,7 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
             <IconSymbol
               name="exclamationmark.triangle.fill"
               size={16}
-              color={hasError ? '#F44336' : '#FFC107'}
+              color={hasError ? colors.danger : colors.warning}
             />
           )}
         </View>
@@ -83,7 +89,7 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
         </View>
 
         {hasError && (
-          <Text style={styles.errorText} numberOfLines={1}>
+          <Text style={[styles.errorText, { color: colors.danger }]} numberOfLines={1}>
             {receipt.error_message}
           </Text>
         )}
@@ -99,7 +105,7 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
           }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <IconSymbol name="trash.fill" size={18} color="#F44336" />
+          <IconSymbol name="trash.fill" size={18} color={colors.danger} />
         </TouchableOpacity>
       )}
     </TouchableOpacity>
@@ -118,10 +124,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  errorContainer: {
-    borderWidth: 1,
-    borderColor: '#F44336',
   },
   thumbnailContainer: {
     position: 'relative',
@@ -177,7 +179,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: '#F44336',
     marginTop: 4,
   },
   deleteButton: {

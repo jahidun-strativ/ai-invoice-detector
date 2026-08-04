@@ -6,6 +6,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -15,6 +16,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -25,8 +27,8 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
         tabBarStyle: {
           backgroundColor: colors.background,
-          borderTopColor: colorScheme === 'dark' ? '#333' : '#E0E0E0',
-          height: 85,
+          borderTopColor: colors.border,
+          height: 56 + insets.bottom,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
@@ -52,7 +54,7 @@ export default function TabLayout() {
         name="capture"
         options={{
           title: 'Scan',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: () => (
             <View style={[styles.scanButton, { backgroundColor: colors.tint }]}>
               <IconSymbol size={28} name="camera.fill" color="#fff" />
             </View>
@@ -73,11 +75,17 @@ export default function TabLayout() {
           ),
         }}
       />
-      {/* Hide the explore tab - we don't need it anymore */}
       <Tabs.Screen
-        name="explore"
+        name="settings"
         options={{
-          href: null, // This hides the tab from navigation
+          title: 'Settings',
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol
+              size={28}
+              name={focused ? 'gearshape.fill' : 'gearshape'}
+              color={color}
+            />
+          ),
         }}
       />
     </Tabs>

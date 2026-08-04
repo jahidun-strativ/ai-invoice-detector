@@ -15,11 +15,14 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { ReceiptCard } from '@/components/receipt/receipt-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ReceiptCardSkeleton } from '@/components/ui/skeleton';
 import { Colors } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -37,6 +40,7 @@ const INVOICE_TYPES: { label: string; value: InvoiceType | 'all' }[] = [
 export default function HistoryScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
 
   const { receipts, filter, status, setFilter, refresh, removeReceipt } =
     useReceipts();
@@ -76,6 +80,7 @@ export default function HistoryScreen() {
   // Handle type filter change
   const handleTypeChange = useCallback(
     (type: InvoiceType | 'all') => {
+      Haptics.selectionAsync();
       setSearchQuery('');
       if (debounceRef.current) clearTimeout(debounceRef.current);
       setFilter({ type, searchQuery: '' });
@@ -164,6 +169,7 @@ export default function HistoryScreen() {
           <TouchableOpacity
             style={[
               styles.filterChip,
+              { backgroundColor: colors.surface },
               selectedType === item.value && {
                 backgroundColor: colors.tint,
               },
@@ -209,7 +215,7 @@ export default function HistoryScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <ThemedText style={styles.title}>Receipt History</ThemedText>
         <TouchableOpacity
           style={styles.exportButton}
@@ -229,7 +235,7 @@ export default function HistoryScreen() {
       </View>
 
       {/* Search */}
-      <View style={styles.searchContainer}>
+      <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
         <IconSymbol name="magnifyingglass" size={20} color={colors.icon} />
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
@@ -249,18 +255,24 @@ export default function HistoryScreen() {
       {/* Filters */}
       {renderFilters()}
 
-      {/* Receipt count */}
+      {/* Receipt count + background refresh indicator */}
       <View style={styles.countContainer}>
-        <Text style={[styles.countText, { color: colors.icon }]}>
+        <Text style={[styles.countText, { color: colors.textSecondary }]}>
           {receipts.length} receipt{receipts.length !== 1 ? 's' : ''}
         </Text>
+        {status === 'loading' && !isRefreshing && (
+          <ActivityIndicator size="small" color={colors.tint} />
+        )}
       </View>
 
       {/* Receipt List — keep the last list rendered during background
           refreshes; only the very first load shows a spinner */}
       {status === 'initializing' ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.tint} />
+        <View>
+          <ReceiptCardSkeleton />
+          <ReceiptCardSkeleton />
+          <ReceiptCardSkeleton />
+          <ReceiptCardSkeleton />
         </View>
       ) : (
         <FlatList
@@ -296,7 +308,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
@@ -317,7 +328,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
     gap: 12,
   },
   searchInput: {
@@ -336,7 +346,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.05)',
     marginRight: 8,
   },
   filterChipText: {
@@ -344,6 +353,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   countContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 20,
     paddingVertical: 12,
   },

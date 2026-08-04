@@ -13,6 +13,8 @@ import {
   ScrollView,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Switch,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -42,6 +44,7 @@ export function ReceiptEditModal({
   const [formData, setFormData] = useState<ReceiptInput | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showItems, setShowItems] = useState(true);
+  const [dateError, setDateError] = useState<string | null>(null);
 
   // Initialize form data when receipt changes
   useEffect(() => {
@@ -77,6 +80,20 @@ export function ReceiptEditModal({
       Alert.alert('Invalid Total', 'Total must be greater than 0');
       return;
     }
+
+    // Validate date format (kept as a plain text field)
+    // ponytail: text input + regex validation; upgrade path is
+    // @react-native-community/datetimepicker if a picker is ever needed
+    if (formData.receipt_date) {
+      const isValid =
+        /^\d{4}-\d{2}-\d{2}$/.test(formData.receipt_date) &&
+        !isNaN(new Date(formData.receipt_date).getTime());
+      if (!isValid) {
+        setDateError('Date must be in YYYY-MM-DD format');
+        return;
+      }
+    }
+    setDateError(null);
 
     setIsSaving(true);
     try {
@@ -140,7 +157,7 @@ export function ReceiptEditModal({
     >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header */}
-        <View style={[styles.header, { borderBottomColor: colors.icon + '20' }]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <IconSymbol name="xmark" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -161,6 +178,10 @@ export function ReceiptEditModal({
           </TouchableOpacity>
         </View>
 
+        <KeyboardAvoidingView
+          style={styles.scrollView}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           {/* Basic Information */}
           <View style={styles.section}>
@@ -169,7 +190,7 @@ export function ReceiptEditModal({
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.icon }]}>Merchant Name</Text>
               <TextInput
-                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                 value={formData.merchant_name || ''}
                 onChangeText={(text) => updateField('merchant_name', text || null)}
                 placeholder="Enter merchant name"
@@ -180,18 +201,28 @@ export function ReceiptEditModal({
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.icon }]}>Receipt Date</Text>
               <TextInput
-                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                style={[
+                  styles.input,
+                  { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
+                  !!dateError && { borderColor: colors.danger },
+                ]}
                 value={formData.receipt_date || ''}
-                onChangeText={(text) => updateField('receipt_date', text || null)}
+                onChangeText={(text) => {
+                  setDateError(null);
+                  updateField('receipt_date', text || null);
+                }}
                 placeholder="YYYY-MM-DD"
                 placeholderTextColor={colors.icon}
               />
+              {dateError && (
+                <Text style={[styles.fieldError, { color: colors.danger }]}>{dateError}</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.icon }]}>Receipt Number</Text>
               <TextInput
-                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                 value={formData.receipt_number || ''}
                 onChangeText={(text) => updateField('receipt_number', text || null)}
                 placeholder="Enter receipt number"
@@ -209,8 +240,8 @@ export function ReceiptEditModal({
                       styles.typeButton,
                       {
                         backgroundColor:
-                          formData.invoice_type === type ? colors.tint : colors.background,
-                        borderColor: colors.icon + '30',
+                          formData.invoice_type === type ? colors.tint : colors.surface,
+                        borderColor: colors.border,
                       },
                     ]}
                     onPress={() => updateField('invoice_type', type)}
@@ -233,7 +264,7 @@ export function ReceiptEditModal({
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.icon }]}>Payment Method</Text>
               <TextInput
-                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                 value={formData.payment_method || ''}
                 onChangeText={(text) => updateField('payment_method', text || null)}
                 placeholder="Cash, Card, etc."
@@ -244,7 +275,7 @@ export function ReceiptEditModal({
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.icon }]}>Currency</Text>
               <TextInput
-                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                 value={formData.currency}
                 onChangeText={(text) => updateField('currency', text)}
                 placeholder="BDT, USD, etc."
@@ -260,7 +291,7 @@ export function ReceiptEditModal({
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.icon }]}>Subtotal</Text>
               <TextInput
-                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                 value={formData.subtotal?.toString() || ''}
                 onChangeText={(text) => {
                   const num = parseFloat(text) || null;
@@ -277,7 +308,7 @@ export function ReceiptEditModal({
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.icon }]}>Tax</Text>
               <TextInput
-                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                 value={formData.tax?.toString() || ''}
                 onChangeText={(text) => {
                   const num = parseFloat(text) || null;
@@ -318,7 +349,7 @@ export function ReceiptEditModal({
                 <Switch
                   value={showItems}
                   onValueChange={setShowItems}
-                  trackColor={{ false: colors.icon + '30', true: colors.tint }}
+                  trackColor={{ false: colors.surfaceSecondary, true: colors.tint }}
                   thumbColor="#fff"
                 />
               </View>
@@ -327,21 +358,21 @@ export function ReceiptEditModal({
             {showItems && (
               <>
                 {formData.items.map((item, index) => (
-                  <View key={index} style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.icon + '20' }]}>
+                  <View key={index} style={[styles.itemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     <View style={styles.itemHeader}>
                       <Text style={[styles.itemNumber, { color: colors.icon }]}>#{index + 1}</Text>
                       <TouchableOpacity
                         onPress={() => removeItem(index)}
                         style={styles.removeButton}
                       >
-                        <IconSymbol name="trash" size={18} color="#F44336" />
+                        <IconSymbol name="trash" size={18} color={colors.danger} />
                       </TouchableOpacity>
                     </View>
 
                     <View style={styles.inputGroup}>
                       <Text style={[styles.label, { color: colors.icon }]}>Item Name</Text>
                       <TextInput
-                        style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                        style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                         value={item.name}
                         onChangeText={(text) => updateItem(index, 'name', text)}
                         placeholder="Enter item name"
@@ -353,7 +384,7 @@ export function ReceiptEditModal({
                       <View style={[styles.inputGroup, styles.itemInputGroup]}>
                         <Text style={[styles.label, { color: colors.icon }]}>Quantity</Text>
                         <TextInput
-                          style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                          style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                           value={item.quantity?.toString() || ''}
                           onChangeText={(text) => {
                             const num = text ? parseFloat(text) : null;
@@ -368,7 +399,7 @@ export function ReceiptEditModal({
                       <View style={[styles.inputGroup, styles.itemInputGroup]}>
                         <Text style={[styles.label, { color: colors.icon }]}>Price</Text>
                         <TextInput
-                          style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.icon + '30' }]}
+                          style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                           value={item.price.toString()}
                           onChangeText={(text) => {
                             const num = parseFloat(text) || 0;
@@ -400,6 +431,7 @@ export function ReceiptEditModal({
             )}
           </View>
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -475,6 +507,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginBottom: 6,
+  },
+  fieldError: {
+    fontSize: 13,
+    marginTop: 6,
   },
   input: {
     borderWidth: 1,

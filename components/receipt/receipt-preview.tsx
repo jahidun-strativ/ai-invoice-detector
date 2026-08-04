@@ -6,7 +6,7 @@
 import { StyleSheet, View, Text, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Receipt } from '@/types/receipt';
-import { Colors } from '@/constants/theme';
+import { Colors, ThemeColors } from '@/constants/theme';
 import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -46,13 +46,14 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
             source={{ uri: receipt.image_uri }}
             style={styles.image}
             contentFit="contain"
+            transition={200}
           />
         </View>
       )}
 
       {/* Error Banner */}
       {hasError && (
-        <View style={styles.errorBanner}>
+        <View style={[styles.errorBanner, { backgroundColor: colors.danger }]}>
           <IconSymbol name="exclamationmark.triangle.fill" size={20} color="#fff" />
           <Text style={styles.errorBannerText}>{receipt.error_message}</Text>
         </View>
@@ -60,9 +61,9 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
 
       {/* Low Confidence Warning */}
       {isLowConfidence && !hasError && (
-        <View style={styles.warningBanner}>
-          <IconSymbol name="exclamationmark.triangle.fill" size={20} color="#5D4E00" />
-          <Text style={styles.warningBannerText}>
+        <View style={[styles.warningBanner, { backgroundColor: colors.warning + '22' }]}>
+          <IconSymbol name="exclamationmark.triangle.fill" size={20} color={colors.warning} />
+          <Text style={[styles.warningBannerText, { color: colors.warning }]}>
             Low confidence ({Math.round(receipt.confidence_score * 100)}%) - Please review
           </Text>
         </View>
@@ -82,7 +83,7 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
             </Text>
           </View>
           {receipt.payment_method && (
-            <View style={[styles.badge, { backgroundColor: '#4CAF50' }]}>
+            <View style={[styles.badge, { backgroundColor: colors.success }]}>
               <Text style={styles.badgeText}>{receipt.payment_method}</Text>
             </View>
           )}
@@ -91,7 +92,7 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
 
       {/* Receipt Info */}
       {receipt.receipt_number && (
-        <View style={styles.infoRow}>
+        <View style={[styles.infoRow, { borderBottomColor: colors.border }]}>
           <Text style={[styles.infoLabel, { color: colors.icon }]}>
             Receipt #
           </Text>
@@ -120,7 +121,7 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
       )}
 
       {/* Totals */}
-      <View style={[styles.section, styles.totalsSection]}>
+      <View style={[styles.section, styles.totalsSection, { borderTopColor: colors.border }]}>
         {receipt.subtotal !== null && (
           <View style={styles.totalRow}>
             <Text style={[styles.totalLabel, { color: colors.icon }]}>
@@ -141,7 +142,7 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
           </View>
         )}
 
-        <View style={[styles.totalRow, styles.grandTotalRow]}>
+        <View style={[styles.totalRow, styles.grandTotalRow, { borderTopColor: colors.border }]}>
           <Text style={[styles.grandTotalLabel, { color: colors.text }]}>
             Total
           </Text>
@@ -152,17 +153,17 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
       </View>
 
       {/* Confidence Score */}
-      <View style={styles.confidenceContainer}>
+      <View style={[styles.confidenceContainer, { backgroundColor: colors.surface }]}>
         <Text style={[styles.confidenceLabel, { color: colors.icon }]}>
           Extraction Confidence
         </Text>
-        <View style={styles.confidenceBar}>
+        <View style={[styles.confidenceBar, { backgroundColor: colors.surfaceSecondary }]}>
           <View
             style={[
               styles.confidenceFill,
               {
                 width: `${receipt.confidence_score * 100}%`,
-                backgroundColor: getConfidenceColor(receipt.confidence_score),
+                backgroundColor: getConfidenceColor(receipt.confidence_score, colors),
               },
             ]}
           />
@@ -175,10 +176,10 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
   );
 }
 
-function getConfidenceColor(score: number): string {
-  if (score >= 0.8) return '#4CAF50';
-  if (score >= 0.5) return '#FFC107';
-  return '#F44336';
+function getConfidenceColor(score: number, colors: ThemeColors): string {
+  if (score >= 0.8) return colors.success;
+  if (score >= 0.5) return colors.warning;
+  return colors.danger;
 }
 
 const styles = StyleSheet.create({
@@ -202,7 +203,7 @@ const styles = StyleSheet.create({
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F44336',
+    
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
@@ -216,7 +217,7 @@ const styles = StyleSheet.create({
   warningBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFC107',
+    
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
@@ -224,7 +225,6 @@ const styles = StyleSheet.create({
   },
   warningBannerText: {
     flex: 1,
-    color: '#000',
     fontSize: 14,
   },
   section: {
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E0E0E0',
+    
   },
   infoLabel: {
     fontSize: 14,
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   totalsSection: {
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    
   },
   totalRow: {
     flexDirection: 'row',
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    
   },
   grandTotalLabel: {
     fontSize: 18,
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   confidenceContainer: {
     marginTop: 16,
     padding: 16,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    
     borderRadius: 12,
   },
   confidenceLabel: {
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   },
   confidenceBar: {
     height: 8,
-    backgroundColor: 'rgba(0,0,0,0.1)',
+    
     borderRadius: 4,
     overflow: 'hidden',
   },

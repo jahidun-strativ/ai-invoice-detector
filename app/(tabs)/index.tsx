@@ -14,11 +14,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { ReceiptCard } from '@/components/receipt/receipt-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { INVOICE_TYPE_ICONS } from '@/constants/receipt-ui';
+import { ReceiptCardSkeleton, Skeleton } from '@/components/ui/skeleton';
+import { INVOICE_TYPE_ICONS, INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { Colors } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -29,10 +32,18 @@ export default function DashboardScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const cardWidth = (width - 48) / 2;
 
-  const { stats, recent: recentReceipts, error, refresh } = useReceipts();
+  const { stats, recent: recentReceipts, status, error, refresh } = useReceipts();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const isFirstLoad = status === 'initializing';
+  const cardSurface = {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+  };
 
   // Handle refresh
   const handleRefresh = useCallback(async () => {
@@ -55,9 +66,9 @@ export default function DashboardScreen() {
         }
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
           <View>
-            <Text style={[styles.greeting, { color: colors.icon }]}>
+            <Text style={[styles.greeting, { color: colors.textSecondary }]}>
               Welcome to
             </Text>
             <ThemedText style={styles.title}>Receipt Scanner</ThemedText>
@@ -79,62 +90,54 @@ export default function DashboardScreen() {
         )}
 
         {/* Quick Stats Cards */}
-        <View style={styles.statsGrid}>
-          {/* Total Receipts */}
-          <View
-            style={[
-              styles.statCard,
-              { width: cardWidth, backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
-            ]}
-          >
-            <View style={[styles.statIcon, { backgroundColor: colorScheme === 'dark' ? '#1E3A5F' : '#E3F2FD' }]}>
-              <IconSymbol name="doc.text.fill" size={24} color="#2196F3" />
-            </View>
-            <Text style={[styles.statValue, { color: colors.text }]}>
-              {stats?.total_count ?? 0}
-            </Text>
-            <Text style={[styles.statLabel, { color: colors.icon }]}>
-              Total Receipts
-            </Text>
+        {isFirstLoad ? (
+          <View style={styles.statsGrid}>
+            <Skeleton width={cardWidth} height={128} radius={16} />
+            <Skeleton width={cardWidth} height={128} radius={16} />
+            <Skeleton width="100%" height={128} radius={16} />
           </View>
+        ) : (
+          <Animated.View entering={FadeIn.duration(300)} style={styles.statsGrid}>
+            {/* Total Receipts */}
+            <View style={[styles.statCard, cardSurface, { width: cardWidth }]}>
+              <View style={[styles.statIcon, { backgroundColor: colors.info + '22' }]}>
+                <IconSymbol name="doc.text.fill" size={24} color={colors.info} />
+              </View>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {stats?.total_count ?? 0}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                Total Receipts
+              </Text>
+            </View>
 
-          {/* This Month */}
-          <View
-            style={[
-              styles.statCard,
-              { width: cardWidth, backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
-            ]}
-          >
-            <View style={[styles.statIcon, { backgroundColor: colorScheme === 'dark' ? '#1B3D2F' : '#E8F5E9' }]}>
-              <IconSymbol name="calendar" size={24} color="#4CAF50" />
+            {/* This Month */}
+            <View style={[styles.statCard, cardSurface, { width: cardWidth }]}>
+              <View style={[styles.statIcon, { backgroundColor: colors.success + '22' }]}>
+                <IconSymbol name="calendar" size={24} color={colors.success} />
+              </View>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {stats?.this_month_count ?? 0}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                This Month
+              </Text>
             </View>
-            <Text style={[styles.statValue, { color: colors.text }]}>
-              {stats?.this_month_count ?? 0}
-            </Text>
-            <Text style={[styles.statLabel, { color: colors.icon }]}>
-              This Month
-            </Text>
-          </View>
 
-          {/* Total Spent */}
-          <View
-            style={[
-              styles.statCard,
-              styles.wideCard,
-              { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
-            ]}
-          >
-            <View style={[styles.statIcon, { backgroundColor: colorScheme === 'dark' ? '#3D2E1B' : '#FFF3E0' }]}>
-              <IconSymbol name="banknote.fill" size={24} color="#FF9800" />
+            {/* Total Spent */}
+            <View style={[styles.statCard, styles.wideCard, cardSurface]}>
+              <View style={[styles.statIcon, { backgroundColor: colors.accentOrange + '22' }]}>
+                <IconSymbol name="banknote.fill" size={24} color={colors.accentOrange} />
+              </View>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {formatCurrency(stats?.total_amount ?? 0)}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                Total Amount
+              </Text>
             </View>
-            <Text style={[styles.statValue, { color: colors.text }]}>
-              {formatCurrency(stats?.total_amount ?? 0)}
-            </Text>
-            <Text style={[styles.statLabel, { color: colors.icon }]}>
-              Total Amount
-            </Text>
-          </View>
-        </View>
+          </Animated.View>
+        )}
 
         {/* Category Breakdown */}
         {stats && stats.total_count > 0 && (
@@ -146,13 +149,7 @@ export default function DashboardScreen() {
                 .map((type) => (
                   <TouchableOpacity
                     key={type}
-                    style={[
-                      styles.categoryCard,
-                      {
-                        backgroundColor:
-                          colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5',
-                      },
-                    ]}
+                    style={[styles.categoryCard, { backgroundColor: colors.surface }]}
                     onPress={() => router.push('/(tabs)/history')}
                   >
                     <IconSymbol
@@ -163,8 +160,8 @@ export default function DashboardScreen() {
                     <Text style={[styles.categoryCount, { color: colors.text }]}>
                       {stats.by_type[type]}
                     </Text>
-                    <Text style={[styles.categoryLabel, { color: colors.icon }]}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    <Text style={[styles.categoryLabel, { color: colors.textSecondary }]}>
+                      {INVOICE_TYPE_LABELS[type]}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -185,10 +182,7 @@ export default function DashboardScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.actionCard,
-                { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F5F5F5' },
-              ]}
+              style={[styles.actionCard, { backgroundColor: colors.surface }]}
               onPress={() => router.push('/(tabs)/history')}
             >
               <IconSymbol name="clock.fill" size={28} color={colors.tint} />
@@ -212,13 +206,19 @@ export default function DashboardScreen() {
             )}
           </View>
 
-          {recentReceipts.length === 0 ? (
+          {isFirstLoad ? (
+            <View style={styles.recentList}>
+              <ReceiptCardSkeleton />
+              <ReceiptCardSkeleton />
+              <ReceiptCardSkeleton />
+            </View>
+          ) : recentReceipts.length === 0 ? (
             <View style={styles.emptyReceipts}>
               <IconSymbol name="doc.text.fill" size={48} color={colors.icon} />
-              <Text style={[styles.emptyText, { color: colors.icon }]}>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                 No receipts yet
               </Text>
-              <Text style={[styles.emptySubtext, { color: colors.icon }]}>
+              <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
                 Scan your first receipt to get started
               </Text>
             </View>
@@ -253,7 +253,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },

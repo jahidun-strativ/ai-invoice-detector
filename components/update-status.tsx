@@ -30,7 +30,7 @@ export function UpdateStatus() {
 
   if (!isEnabled) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.row}>
           <IconSymbol name="info.circle" size={20} color={colors.text} />
           <Text style={[styles.text, { color: colors.text }]}>
@@ -50,7 +50,7 @@ export function UpdateStatus() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.header}>
         <IconSymbol name="arrow.down.circle" size={24} color={colors.tint} />
         <Text style={[styles.title, { color: colors.text }]}>App Updates</Text>
@@ -80,7 +80,7 @@ export function UpdateStatus() {
 
       {isUpdateAvailable && !isChecking && (
         <View style={styles.statusContainer}>
-          <IconSymbol name="checkmark.circle.fill" size={20} color="#4CAF50" />
+          <IconSymbol name="checkmark.circle.fill" size={20} color={colors.success} />
           <Text style={[styles.statusText, { color: colors.text }]}>
             Update available! Downloading...
           </Text>
@@ -89,7 +89,7 @@ export function UpdateStatus() {
 
       {isUpdatePending && (
         <View style={styles.statusContainer}>
-          <IconSymbol name="checkmark.circle.fill" size={20} color="#4CAF50" />
+          <IconSymbol name="checkmark.circle.fill" size={20} color={colors.success} />
           <Text style={[styles.statusText, { color: colors.text }]}>
             Update downloaded! App will reload...
           </Text>
@@ -98,8 +98,8 @@ export function UpdateStatus() {
 
       {error && (
         <View style={styles.statusContainer}>
-          <IconSymbol name="exclamationmark.triangle.fill" size={20} color="#FF5722" />
-          <Text style={[styles.errorText, { color: '#FF5722' }]}>
+          <IconSymbol name="exclamationmark.triangle.fill" size={20} color={colors.danger} />
+          <Text style={[styles.errorText, { color: colors.danger }]}>
             {error.message || 'Failed to check for updates'}
           </Text>
         </View>
@@ -138,6 +138,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginVertical: 8,
     marginHorizontal: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

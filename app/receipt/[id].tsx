@@ -14,6 +14,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { exportAndShare } from '@/services/export';
 import { getReceiptById } from '@/services/storage';
 import { Receipt, ReceiptInput } from '@/types/receipt';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -109,6 +110,7 @@ export default function ReceiptDetailScreen() {
   const handleDelete = useCallback(() => {
     if (!receipt) return;
 
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert(
       'Delete Receipt',
       'Are you sure you want to delete this receipt? This action cannot be undone.',
@@ -229,7 +231,7 @@ export default function ReceiptDetailScreen() {
                 onPress={handleDelete}
                 style={styles.headerButton}
               >
-                <IconSymbol name="trash.fill" size={22} color="#F44336" />
+                <IconSymbol name="trash.fill" size={22} color={colors.danger} />
               </TouchableOpacity>
             </View>
           ),
@@ -247,6 +249,7 @@ export default function ReceiptDetailScreen() {
             source={{ uri: receipt.image_uri }}
             style={styles.image}
             contentFit="cover"
+            transition={200}
           />
           <View style={styles.imageOverlay}>
             <IconSymbol name="arrow.up.left.and.arrow.down.right" size={24} color="#fff" />
@@ -276,8 +279,8 @@ export default function ReceiptDetailScreen() {
         presentationStyle="fullScreen"
         onRequestClose={() => setShowJsonPreview(false)}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colorScheme === 'dark' ? '#1a1a1a' : '#f5f5f5' }]}>
-          <View style={[styles.modalHeader, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.surface }]}>
+          <View style={[styles.modalHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>JSON Schema</Text>
             <TouchableOpacity
               onPress={() => setShowJsonPreview(false)}
@@ -291,12 +294,9 @@ export default function ReceiptDetailScreen() {
             style={styles.jsonScrollView}
             contentContainerStyle={styles.jsonContentContainer}
           >
-            <View style={[styles.jsonContainer, { backgroundColor: colorScheme === 'dark' ? '#0d0d0d' : '#fff' }]}>
-              <Text 
-                style={[
-                  styles.jsonText, 
-                  { color: colorScheme === 'dark' ? '#4FC3F7' : '#0a7ea4' }
-                ]}
+            <View style={[styles.jsonContainer, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth }]}>
+              <Text
+                style={[styles.jsonText, { color: colors.tint }]}
                 selectable
               >
                 {getJsonPreview()}
@@ -304,9 +304,9 @@ export default function ReceiptDetailScreen() {
             </View>
           </ScrollView>
 
-          <View style={[styles.modalActions, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalActions, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
             <TouchableOpacity
-              style={[styles.modalActionButton, { backgroundColor: '#4CAF50' }]}
+              style={[styles.modalActionButton, { backgroundColor: colors.success }]}
               onPress={() => {
                 setShowJsonPreview(false);
                 handleExport('json');
@@ -322,7 +322,7 @@ export default function ReceiptDetailScreen() {
       {/* Action Buttons */}
       <View style={[styles.actionsContainer, { backgroundColor: colors.background }]}>
         <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+          style={[styles.actionButton, { backgroundColor: colors.success }]}
           onPress={() => handleExport('json')}
           disabled={isExporting}
         >
@@ -337,7 +337,7 @@ export default function ReceiptDetailScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: '#2196F3' }]}
+          style={[styles.actionButton, { backgroundColor: colors.info }]}
           onPress={() => handleExport('csv')}
           disabled={isExporting}
         >
@@ -464,7 +464,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ccc',
   },
   modalTitle: {
     fontSize: 20,
@@ -492,7 +491,6 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 32,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#ccc',
   },
   modalActionButton: {
     flexDirection: 'row',

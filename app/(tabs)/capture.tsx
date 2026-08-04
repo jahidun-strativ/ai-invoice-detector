@@ -17,6 +17,7 @@ import {
   validateImage,
 } from '@/services/ai-vision';
 import { ProcessingState, Receipt, ReceiptInput } from '@/types/receipt';
+import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -27,6 +28,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 export default function CaptureScreen() {
   const colorScheme = useColorScheme();
@@ -53,6 +55,7 @@ export default function CaptureScreen() {
 
   // Handle image capture
   const handleCapture = useCallback(async (imageUri: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setCapturedImageUri(imageUri);
     setState('processing');
     setErrorMessage(null);
@@ -91,12 +94,14 @@ export default function CaptureScreen() {
       const savedReceipt = await addReceipt(receiptInput);
       setProcessedReceipt(savedReceipt);
       setState('success');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error processing receipt:', error);
       setErrorMessage(
         error instanceof Error ? error.message : 'Failed to process receipt'
       );
       setState('error');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }, [addReceipt]);
 
@@ -189,10 +194,10 @@ export default function CaptureScreen() {
           <IconSymbol
             name="exclamationmark.triangle.fill"
             size={64}
-            color="#F44336"
+            color={colors.danger}
           />
           <ThemedText style={styles.errorTitle}>Processing Failed</ThemedText>
-          <Text style={[styles.errorMessage, { color: colors.icon }]}>
+          <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
             {errorMessage || 'Unable to process the receipt image'}
           </Text>
 
@@ -206,7 +211,7 @@ export default function CaptureScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.button, styles.secondaryButton]}
+              style={[styles.button, styles.secondaryButton, { borderColor: colors.border }]}
               onPress={handleSaveWithError}
             >
               <IconSymbol name="square.and.arrow.down" size={20} color={colors.tint} />
@@ -223,10 +228,10 @@ export default function CaptureScreen() {
   if (state === 'success' && processedReceipt) {
     return (
       <ThemedView style={styles.container}>
-        <View style={styles.successHeader}>
-          <IconSymbol name="checkmark.circle.fill" size={32} color="#4CAF50" />
+        <Animated.View entering={FadeInDown.duration(400)} style={styles.successHeader}>
+          <IconSymbol name="checkmark.circle.fill" size={32} color={colors.success} />
           <ThemedText style={styles.successTitle}>Receipt Processed!</ThemedText>
-        </View>
+        </Animated.View>
 
         <ScrollView style={styles.previewScroll}>
           <ReceiptPreview receipt={processedReceipt} showImage={true} />
@@ -333,7 +338,6 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#ccc',
   },
   outlineButton: {
     backgroundColor: 'transparent',
