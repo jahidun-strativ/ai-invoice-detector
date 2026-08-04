@@ -14,7 +14,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   parseReceiptWithRetry,
   validateImage,
-} from '@/services/groq-vision';
+} from '@/services/ai-vision';
 import { createReceipt, updateReceipt } from '@/services/storage';
 import { ProcessingState, Receipt, ReceiptInput } from '@/types/receipt';
 import { router } from 'expo-router';

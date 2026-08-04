@@ -2,37 +2,39 @@ import * as FileSystem from "expo-file-system/legacy";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { Image as RNImage } from "react-native";
 import {
-  GroqReceiptResponse,
+  AIReceiptResponse,
   ImageProcessingResult,
   InvoiceType,
 } from "../types/receipt";
 
-// Groq API configuration
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL_ID = "openai/gpt-oss-20b";
+// OpenRouter API configuration (OpenAI-compatible chat completions)
+const API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const MODEL_ID = "google/gemini-2.5-flash";
 
-// Image constraints from Groq API
+// Image constraints
 const MAX_BASE64_SIZE = 4 * 1024 * 1024; // 4MB
-const TARGET_IMAGE_DIMENSION = 2048; // Target size for optimal OCR quality (max 2048px per Groq API)
+const TARGET_IMAGE_DIMENSION = 2048; // Target size for optimal OCR quality
 const JPEG_QUALITY = 0.92; // Higher quality for better text recognition
 const RETRY_BASE_DELAY_MS = 1000;
 const MIN_ACCEPTABLE_CONFIDENCE = 0.45;
 const MATH_TOLERANCE = 2;
 
 /**
- * Get Groq API key from environment
- * Prefer EXPO_PUBLIC_GROQ_API_KEY for client builds; GROQ_API_KEY for server/dev
+ * Get OpenRouter API key from environment
  */
 function getApiKey(): string {
-  const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
+  const apiKey = process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
 
   if (!apiKey) {
     throw new Error(
-      "GROQ_API_KEY not found. Please set EXPO_PUBLIC_GROQ_API_KEY or GROQ_API_KEY.",
+      "OpenRouter API key not found. Please set EXPO_PUBLIC_OPENROUTER_API_KEY.",
     );
   }
   return apiKey;
 }
+
+/** Errors that retrying cannot fix (bad key, no credits) */
+class NonRetryableError extends Error {}
 
 /**
  * Receipt extraction prompt
@@ -196,7 +198,7 @@ async function getImageDimensions(
  * Process and resize image for API upload
  * Optimizes image for OCR by resizing, converting to JPEG, and compressing
  */
-export async function processImageForUpload(
+async function processImageForUpload(
   imageUri: string,
 ): Promise<ImageProcessingResult> {
   // Read the original file
@@ -331,15 +333,15 @@ export async function processImageForUpload(
 }
 
 /**
- * Parse receipt image using Groq Vision API
+ * Parse receipt image using the OpenRouter vision API
  */
-export async function parseReceipt(
+async function parseReceipt(
   imageUri: string,
   options?: {
     prompt?: string;
     processedImage?: ImageProcessingResult;
   },
-): Promise<GroqReceiptResponse> {
+): Promise<AIReceiptResponse> {
   try {
     // Process image once and optionally reuse across retries
     const processedImage =
@@ -349,11 +351,13 @@ export async function parseReceipt(
     const apiKey = getApiKey();
 
     // Prepare the request
-    const response = await fetch(GROQ_API_URL, {
+    const response = await fetch(API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": "https://github.com/jahidun-strativ/ai-invoice-extractor",
+        "X-Title": "AI Receipt Scanner",
       },
       body: JSON.stringify({
         model: MODEL_ID,
@@ -382,20 +386,25 @@ export async function parseReceipt(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        `Groq API error: ${response.status} - ${errorData.error?.message || response.statusText}`,
-      );
+      const detail = errorData.error?.message || response.statusText;
+      if (response.status === 401) {
+        throw new NonRetryableError(`Invalid OpenRouter API key: ${detail}`);
+      }
+      if (response.status === 402) {
+        throw new NonRetryableError(`OpenRouter credits exhausted: ${detail}`);
+      }
+      throw new Error(`AI API error: ${response.status} - ${detail}`);
     }
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
 
     if (!content) {
-      throw new Error("No response from Groq API");
+      throw new Error("No response from AI API");
     }
 
     // Parse the JSON response
-    const parsed = JSON.parse(content) as GroqReceiptResponse;
+    const parsed = JSON.parse(content) as AIReceiptResponse;
 
     // Validate and normalize the response
     return normalizeResponse({
@@ -403,6 +412,9 @@ export async function parseReceipt(
       raw_text: content,
     });
   } catch (error) {
+    if (error instanceof NonRetryableError) {
+      throw error; // let the retry loop short-circuit
+    }
     // Return error response
     return {
       merchant_name: null,
@@ -428,9 +440,9 @@ export async function parseReceipt(
 export async function parseReceiptWithRetry(
   imageUri: string,
   maxRetries: number = 3,
-): Promise<GroqReceiptResponse> {
+): Promise<AIReceiptResponse> {
   let lastError: Error | null = null;
-  let bestResult: GroqReceiptResponse | null = null;
+  let bestResult: AIReceiptResponse | null = null;
 
   let processedImage: ImageProcessingResult;
   try {
@@ -478,6 +490,9 @@ export async function parseReceiptWithRetry(
       );
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+      if (error instanceof NonRetryableError) {
+        break; // retrying won't fix a bad key or exhausted credits
+      }
     }
 
     // Wait before retry with exponential backoff
@@ -516,7 +531,7 @@ export async function parseReceiptWithRetry(
 /**
  * Normalize and validate the API response
  */
-function normalizeResponse(response: GroqReceiptResponse): GroqReceiptResponse {
+function normalizeResponse(response: AIReceiptResponse): AIReceiptResponse {
   // Normalize invoice type
   const validTypes: InvoiceType[] = [
     "retail",
@@ -695,7 +710,7 @@ function calibrateConfidenceScore(input: {
   return Math.max(0, Math.min(1, score));
 }
 
-function shouldAcceptExtraction(response: GroqReceiptResponse): boolean {
+function shouldAcceptExtraction(response: AIReceiptResponse): boolean {
   if (response.error_message && response.total === null) {
     return false;
   }
@@ -713,7 +728,7 @@ function shouldAcceptExtraction(response: GroqReceiptResponse): boolean {
   return hasCoreData && response.confidence_score >= 0.3;
 }
 
-function calculateExtractionScore(response: GroqReceiptResponse): number {
+function calculateExtractionScore(response: AIReceiptResponse): number {
   let score = response.confidence_score * 100;
   if (response.total !== null) score += 60;
   if (response.items.length > 0) score += 20;

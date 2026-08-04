@@ -34,9 +34,9 @@ export interface Receipt {
 }
 
 /**
- * Response from Groq Vision API after parsing receipt
+ * Response from the AI vision API after parsing receipt
  */
-export interface GroqReceiptResponse {
+export interface AIReceiptResponse {
   merchant_name: string | null;
   receipt_date: string | null;
   receipt_number: string | null;
