@@ -218,9 +218,9 @@ export default function HistoryScreen() {
   );
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: 12 }]}>
         <ThemedText style={styles.title}>Receipt History</ThemedText>
         <TouchableOpacity
           style={styles.exportButton}

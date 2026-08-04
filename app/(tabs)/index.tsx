@@ -53,7 +53,7 @@ export default function DashboardScreen() {
   }, [refresh]);
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -66,7 +66,7 @@ export default function DashboardScreen() {
         }
       >
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={[styles.header, { paddingTop: 16 }]}>
           <View>
             <Text style={[styles.greeting, { color: colors.textSecondary }]}>
               Welcome back 👋

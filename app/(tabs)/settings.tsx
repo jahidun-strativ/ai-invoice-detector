@@ -24,9 +24,9 @@ export default function SettingsScreen() {
   const channel = Updates.channel || 'development';
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={[styles.header, { paddingTop: 12 }]}>
           <ThemedText style={styles.title}>Settings</ThemedText>
         </View>
 
