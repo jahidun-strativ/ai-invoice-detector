@@ -5,24 +5,18 @@
 
 import { StyleSheet, View, Text, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
-import { Receipt, InvoiceType } from '@/types/receipt';
+import { Receipt } from '@/types/receipt';
 import { Colors } from '@/constants/theme';
+import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { formatCurrency } from '@/utils/format';
 import { LineItemRow } from './line-item';
 
 interface ReceiptPreviewProps {
   receipt: Receipt;
   showImage?: boolean;
 }
-
-const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
-  retail: 'Retail',
-  restaurant: 'Restaurant',
-  utility: 'Utility Bill',
-  service: 'Service',
-  unknown: 'Unknown',
-};
 
 export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProps) {
   const colorScheme = useColorScheme();
@@ -133,10 +127,7 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
               Subtotal
             </Text>
             <Text style={[styles.totalValue, { color: colors.text }]}>
-              {receipt.currency}{' '}
-              {receipt.subtotal.toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-              })}
+              {formatCurrency(receipt.subtotal, receipt.currency)}
             </Text>
           </View>
         )}
@@ -145,10 +136,7 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
           <View style={styles.totalRow}>
             <Text style={[styles.totalLabel, { color: colors.icon }]}>Tax</Text>
             <Text style={[styles.totalValue, { color: colors.text }]}>
-              {receipt.currency}{' '}
-              {receipt.tax.toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-              })}
+              {formatCurrency(receipt.tax, receipt.currency)}
             </Text>
           </View>
         )}
@@ -158,10 +146,7 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
             Total
           </Text>
           <Text style={[styles.grandTotalValue, { color: colors.tint }]}>
-            {receipt.currency}{' '}
-            {receipt.total.toLocaleString('en-US', {
-              minimumFractionDigits: 2,
-            })}
+            {formatCurrency(receipt.total, receipt.currency)}
           </Text>
         </View>
       </View>

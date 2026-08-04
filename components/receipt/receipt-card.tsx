@@ -5,10 +5,12 @@
 
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { Image } from 'expo-image';
-import { Receipt, InvoiceType } from '@/types/receipt';
+import { Receipt } from '@/types/receipt';
 import { Colors } from '@/constants/theme';
+import { INVOICE_TYPE_ICONS, getInvoiceTypeColor } from '@/constants/receipt-ui';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { formatCurrency, formatDate } from '@/utils/format';
 
 interface ReceiptCardProps {
   receipt: Receipt;
@@ -16,40 +18,14 @@ interface ReceiptCardProps {
   onDelete?: () => void;
 }
 
-const INVOICE_TYPE_ICONS: Record<InvoiceType, string> = {
-  retail: 'cart.fill',
-  restaurant: 'fork.knife',
-  utility: 'bolt.fill',
-  service: 'wrench.and.screwdriver.fill',
-  unknown: 'doc.questionmark.fill',
-};
-
-const INVOICE_TYPE_COLORS: Record<InvoiceType, string> = {
-  retail: '#4CAF50',
-  restaurant: '#FF9800',
-  utility: '#2196F3',
-  service: '#9C27B0',
-  unknown: '#757575',
-};
-
 export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  const formattedDate = receipt.receipt_date
-    ? new Date(receipt.receipt_date).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : 'Unknown date';
+  const formattedDate = formatDate(receipt.receipt_date);
+  const formattedTotal = formatCurrency(receipt.total, receipt.currency);
 
-  const formattedTotal = `${receipt.currency} ${receipt.total.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-
-  const typeColor = INVOICE_TYPE_COLORS[receipt.invoice_type];
+  const typeColor = getInvoiceTypeColor(receipt.invoice_type, colors);
   const typeIcon = INVOICE_TYPE_ICONS[receipt.invoice_type];
 
   const hasError = !!receipt.error_message;
@@ -73,7 +49,7 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
           contentFit="cover"
         />
         <View style={[styles.typeBadge, { backgroundColor: typeColor }]}>
-          <IconSymbol name={typeIcon as any} size={14} color="#fff" />
+          <IconSymbol name={typeIcon} size={14} color="#fff" />
         </View>
       </View>
 

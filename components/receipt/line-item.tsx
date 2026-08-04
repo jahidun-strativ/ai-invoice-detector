@@ -7,6 +7,7 @@ import { StyleSheet, View, Text } from 'react-native';
 import { LineItem } from '@/types/receipt';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { formatCurrency } from '@/utils/format';
 
 interface LineItemRowProps {
   item: LineItem;
@@ -17,16 +18,13 @@ export function LineItemRow({ item, currency }: LineItemRowProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  const formattedPrice = `${currency} ${item.price.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  const formattedPrice = formatCurrency(item.price, currency);
 
   const quantityText =
     item.quantity !== null && item.quantity > 1 ? `x${item.quantity}` : '';
 
   return (
-    <View style={[styles.container, { backgroundColor: 'rgba(0,0,0,0.03)' }]}>
+    <View style={[styles.container, { backgroundColor: colors.surface }]}>
       <View style={styles.nameContainer}>
         <Text
           style={[styles.name, { color: colors.text }]}

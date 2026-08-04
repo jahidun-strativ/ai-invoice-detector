@@ -29,15 +29,14 @@ import {
   initDatabase,
 } from '@/services/storage';
 import { exportAndShare } from '@/services/export';
+import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { Receipt, InvoiceType, ReceiptFilter } from '@/types/receipt';
 
 const INVOICE_TYPES: { label: string; value: InvoiceType | 'all' }[] = [
   { label: 'All', value: 'all' },
-  { label: 'Retail', value: 'retail' },
-  { label: 'Restaurant', value: 'restaurant' },
-  { label: 'Utility', value: 'utility' },
-  { label: 'Service', value: 'service' },
-  { label: 'Unknown', value: 'unknown' },
+  ...(Object.entries(INVOICE_TYPE_LABELS) as [InvoiceType, string][]).map(
+    ([value, label]) => ({ label, value }),
+  ),
 ];
 
 export default function HistoryScreen() {

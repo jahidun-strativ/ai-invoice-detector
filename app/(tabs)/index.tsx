@@ -18,6 +18,7 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { ReceiptCard } from '@/components/receipt/receipt-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { INVOICE_TYPE_ICONS } from '@/constants/receipt-ui';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -26,17 +27,11 @@ import {
   initDatabase,
 } from '@/services/storage';
 import { Receipt, ReceiptStats, InvoiceType } from '@/types/receipt';
+import { formatCurrency } from '@/utils/format';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 
-const INVOICE_TYPE_ICONS: Record<InvoiceType, string> = {
-  retail: 'cart.fill',
-  restaurant: 'fork.knife',
-  utility: 'bolt.fill',
-  service: 'wrench.and.screwdriver.fill',
-  unknown: 'doc.questionmark.fill',
-};
 
 export default function DashboardScreen() {
   const colorScheme = useColorScheme();
@@ -88,13 +83,6 @@ export default function DashboardScreen() {
   }, [loadData]);
 
   // Format currency
-  const formatCurrency = (amount: number, currency: string = 'BDT') => {
-    return `${currency} ${amount.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
-
   return (
     <ThemedView style={styles.container}>
       <ScrollView
@@ -202,7 +190,7 @@ export default function DashboardScreen() {
                     onPress={() => router.push('/(tabs)/history')}
                   >
                     <IconSymbol
-                      name={INVOICE_TYPE_ICONS[type] as any}
+                      name={INVOICE_TYPE_ICONS[type]}
                       size={20}
                       color={colors.tint}
                     />

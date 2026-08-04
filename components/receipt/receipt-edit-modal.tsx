@@ -16,6 +16,7 @@ import {
   Switch,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Receipt, ReceiptInput, InvoiceType, LineItem } from '@/types/receipt';
@@ -27,14 +28,7 @@ interface ReceiptEditModalProps {
   onSave: (updatedReceipt: ReceiptInput) => Promise<void>;
 }
 
-const INVOICE_TYPES: InvoiceType[] = ['retail', 'restaurant', 'utility', 'service', 'unknown'];
-const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
-  retail: 'Retail',
-  restaurant: 'Restaurant',
-  utility: 'Utility',
-  service: 'Service',
-  unknown: 'Unknown',
-};
+const INVOICE_TYPES = Object.keys(INVOICE_TYPE_LABELS) as InvoiceType[];
 
 export function ReceiptEditModal({
   visible,
