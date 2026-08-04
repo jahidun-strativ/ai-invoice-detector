@@ -111,8 +111,9 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   sectionLabel: {
     fontSize: 13,
@@ -124,7 +125,7 @@ const styles = StyleSheet.create({
   },
   card: {
     marginHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 16,
   },

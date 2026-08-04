@@ -118,12 +118,12 @@ const styles = StyleSheet.create({
     padding: 12,
     marginHorizontal: 16,
     marginVertical: 6,
-    borderRadius: 12,
+    borderRadius: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   thumbnailContainer: {
     position: 'relative',
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: 60,
     height: 80,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   typeBadge: {
     position: 'absolute',

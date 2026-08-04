@@ -66,10 +66,10 @@ export default function DashboardScreen() {
         }
       >
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
           <View>
             <Text style={[styles.greeting, { color: colors.textSecondary }]}>
-              Welcome to
+              Welcome back 👋
             </Text>
             <ThemedText style={styles.title}>Receipt Scanner</ThemedText>
           </View>
@@ -77,7 +77,7 @@ export default function DashboardScreen() {
             style={[styles.scanButton, { backgroundColor: colors.tint }]}
             onPress={() => router.push('/(tabs)/capture')}
           >
-            <IconSymbol name="camera.fill" size={24} color="#fff" />
+            <IconSymbol name="camera.fill" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -89,52 +89,61 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Quick Stats Cards */}
+        {/* Hero total + stat tiles */}
         {isFirstLoad ? (
           <View style={styles.statsGrid}>
-            <Skeleton width={cardWidth} height={128} radius={16} />
-            <Skeleton width={cardWidth} height={128} radius={16} />
-            <Skeleton width="100%" height={128} radius={16} />
+            <Skeleton width="100%" height={160} radius={24} />
+            <Skeleton width={cardWidth} height={104} radius={20} />
+            <Skeleton width={cardWidth} height={104} radius={20} />
           </View>
         ) : (
           <Animated.View entering={FadeIn.duration(300)} style={styles.statsGrid}>
-            {/* Total Receipts */}
-            <View style={[styles.statCard, cardSurface, { width: cardWidth }]}>
-              <View style={[styles.statIcon, { backgroundColor: colors.info + '22' }]}>
-                <IconSymbol name="doc.text.fill" size={24} color={colors.info} />
+            {/* Hero: total spent */}
+            <View style={[styles.heroCard, { backgroundColor: colors.heroBg }]}>
+              <View style={styles.heroTopRow}>
+                <Text style={[styles.heroLabel, { color: colors.heroTextMuted }]}>
+                  Total Spent
+                </Text>
+                <View style={styles.heroIconChip}>
+                  <IconSymbol name="banknote.fill" size={18} color="#fff" />
+                </View>
               </View>
-              <Text style={[styles.statValue, { color: colors.text }]}>
-                {stats?.total_count ?? 0}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Total Receipts
-              </Text>
-            </View>
-
-            {/* This Month */}
-            <View style={[styles.statCard, cardSurface, { width: cardWidth }]}>
-              <View style={[styles.statIcon, { backgroundColor: colors.success + '22' }]}>
-                <IconSymbol name="calendar" size={24} color={colors.success} />
-              </View>
-              <Text style={[styles.statValue, { color: colors.text }]}>
-                {stats?.this_month_count ?? 0}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                This Month
-              </Text>
-            </View>
-
-            {/* Total Spent */}
-            <View style={[styles.statCard, styles.wideCard, cardSurface]}>
-              <View style={[styles.statIcon, { backgroundColor: colors.accentOrange + '22' }]}>
-                <IconSymbol name="banknote.fill" size={24} color={colors.accentOrange} />
-              </View>
-              <Text style={[styles.statValue, { color: colors.text }]}>
+              <Text style={[styles.heroAmount, { color: colors.heroText }]}>
                 {formatCurrency(stats?.total_amount ?? 0)}
               </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Total Amount
+              <Text style={[styles.heroSub, { color: colors.heroTextMuted }]}>
+                across {stats?.total_count ?? 0} receipt
+                {(stats?.total_count ?? 0) !== 1 ? 's' : ''}
               </Text>
+            </View>
+
+            {/* Stat tiles */}
+            <View style={[styles.statTile, cardSurface, { width: cardWidth }]}>
+              <View style={[styles.statIcon, { backgroundColor: colors.info + '1A' }]}>
+                <IconSymbol name="doc.text.fill" size={20} color={colors.info} />
+              </View>
+              <View style={styles.statTileText}>
+                <Text style={[styles.statValue, { color: colors.text }]}>
+                  {stats?.total_count ?? 0}
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  Receipts
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.statTile, cardSurface, { width: cardWidth }]}>
+              <View style={[styles.statIcon, { backgroundColor: colors.success + '1A' }]}>
+                <IconSymbol name="calendar" size={20} color={colors.success} />
+              </View>
+              <View style={styles.statTileText}>
+                <Text style={[styles.statValue, { color: colors.text }]}>
+                  {stats?.this_month_count ?? 0}
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  This Month
+                </Text>
+              </View>
             </View>
           </Animated.View>
         )}
@@ -261,18 +270,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   scanButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#4F46E5',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 5,
   },
@@ -281,6 +291,54 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     paddingHorizontal: 16,
     gap: 12,
+  },
+  heroCard: {
+    width: '100%',
+    borderRadius: 24,
+    padding: 22,
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  heroLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  heroIconChip: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroAmount: {
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    marginTop: 12,
+  },
+  heroSub: {
+    fontSize: 13,
+    marginTop: 6,
+  },
+  statTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 20,
+  },
+  statTileText: {
+    flex: 1,
   },
   errorBanner: {
     flexDirection: 'row',
@@ -295,29 +353,21 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
   },
-  statCard: {
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'flex-start',
-  },
-  wideCard: {
-    width: '100%',
-  },
   statIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
   statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 13,
+    marginTop: 2,
   },
   section: {
     marginTop: 24,
@@ -330,8 +380,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 19,
+    fontWeight: '700',
+    letterSpacing: -0.3,
     marginBottom: 12,
   },
   seeAllText: {
@@ -365,7 +416,7 @@ const styles = StyleSheet.create({
   actionCard: {
     flex: 1,
     padding: 20,
-    borderRadius: 16,
+    borderRadius: 20,
     alignItems: 'center',
     gap: 10,
   },

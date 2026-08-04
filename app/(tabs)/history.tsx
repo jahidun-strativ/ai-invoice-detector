@@ -169,9 +169,14 @@ export default function HistoryScreen() {
           <TouchableOpacity
             style={[
               styles.filterChip,
-              { backgroundColor: colors.surface },
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
               selectedType === item.value && {
                 backgroundColor: colors.tint,
+                borderColor: colors.tint,
               },
             ]}
             onPress={() => handleTypeChange(item.value)}
@@ -312,8 +317,9 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   exportButton: {
     width: 44,
@@ -327,7 +333,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     gap: 12,
   },
   searchInput: {
