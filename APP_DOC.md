@@ -1,201 +1,128 @@
 # AI Receipt Scanner — App Documentation
 
 ## 1) Overview
-AI Receipt Scanner is an Expo/React Native mobile app that captures receipt/invoice images and extracts structured financial data using Groq Vision (Llama 4 Scout). Extracted data is normalized, stored locally in SQLite, and can be exported as JSON or Google‑Sheets‑friendly CSV.
 
-**Primary users**: accounting / finance teams who want to reduce manual receipt entry.
+AI Receipt Scanner is an Expo/React Native app that captures receipt/invoice images and extracts structured financial data using **Google Gemini 2.5 Flash via OpenRouter**. Extracted data is normalized, stored locally in SQLite, and can be exported as JSON or Google-Sheets-friendly CSV.
 
----
+**Primary users**: accounting/finance teams who want to reduce manual receipt entry. Extraction is tuned for English and Bengali/Bangla receipts, including handwritten ones.
 
-## 2) Tech Stack
-- **Framework**: Expo SDK 54, React Native
-- **Navigation**: Expo Router (file-based routes)
-- **Camera / Media**: `expo-camera`, `expo-image-picker`, `expo-image`
-- **Storage**: `expo-sqlite`
-- **Filesystem / Export**: `expo-file-system/legacy`, `expo-sharing`
-- **AI / OCR**: Groq Vision via OpenAI-compatible Chat Completions endpoint
+For setup and quickstart see [README.md](README.md). For operational tasks (releases, key rotation, model swaps) see [MAINTENANCE.md](MAINTENANCE.md).
 
 ---
 
-## 3) App Structure
+## 2) Core Data Flow
+
+```
+capture (camera/gallery)
+  → validateImage            (exists, ≤20MB, ≤33MP)
+  → processImageForUpload    (resize/compress to ≤4MB base64, 3-tier cascade)
+  → OpenRouter chat completions (Gemini 2.5 Flash, JSON mode, temp 0)
+  → normalizeResponse        (types, dates, Bangla digits, confidence)
+  → ReceiptsProvider.addReceipt → SQLite
+  → export (JSON/CSV, share sheet)
+```
+
+---
+
+## 3) Module Reference
 
 ### 3.1 Routing (`app/`)
-- `app/(tabs)/index.tsx`: Dashboard
-- `app/(tabs)/capture.tsx`: Capture + AI processing flow
-- `app/(tabs)/history.tsx`: Receipt list + search/filter
-- `app/receipt/[id].tsx`: Receipt detail, JSON preview, export
-- `app/(tabs)/_layout.tsx`: Bottom tabs (Home / Scan / History)
 
-### 3.2 Services (`services/`)
-- `services/groq-vision.ts`: Groq Vision request + response normalization
-- `services/storage.ts`: SQLite schema + CRUD + stats queries
-- `services/export.ts`: JSON/CSV export + share
+- `app/(tabs)/index.tsx` — Dashboard: stats cards, category breakdown, quick actions, recent receipts. Skeletons on first load; error banner on load failure.
+- `app/(tabs)/capture.tsx` — Capture + AI processing state machine (`idle → processing → success | error`). Success state resets when the tab loses focus.
+- `app/(tabs)/history.tsx` — Receipt list with type filter chips and debounced (300ms) merchant search. Background refreshes keep the last list rendered (no full-screen spinner).
+- `app/(tabs)/settings.tsx` — OTA update status/check (hosts `UpdateStatus`), app version/channel, AI model info.
+- `app/receipt/[id].tsx` — Detail: image viewer, JSON schema preview modal, edit, delete, export.
+- `app/_layout.tsx` — Root: `GestureHandlerRootView → SafeAreaProvider → ThemeProvider → ReceiptsProvider → Stack`. Also triggers OTA check on start.
 
-### 3.3 Reusable UI (`components/`)
-- `components/receipt/camera-capture.tsx`: Camera + gallery picker UI
-- `components/receipt/receipt-card.tsx`: Receipt list item
-- `components/receipt/receipt-preview.tsx`: Receipt detail display
-- `components/receipt/line-item.tsx`: Line item row
-- `components/ui/icon-symbol.tsx`: iOS SF Symbols → Android/Web MaterialIcons mapping
+### 3.2 State (`contexts/receipts-context.tsx`)
 
-### 3.4 Types (`types/`)
-- `types/receipt.ts`: `Receipt`, `LineItem`, filters, stats, export types
+`ReceiptsProvider` is the single source of truth. It initializes the database once, then owns:
 
----
+- **State**: `receipts` (current filtered list), `recent` (last 5), `stats`, `filter { type, searchQuery }`, `status` (`initializing | loading | ready | error`), `error`
+- **Actions**:
+  - `refresh()` — reloads list + recent + stats, always honoring the active filter/search
+  - `setFilter(partial)` — updates filter and refreshes
+  - `addReceipt(input)` / `updateReceiptById(id, input)` / `removeReceipt(id)` — write to SQLite, then refresh in the background so every screen stays in sync
 
-## 4) Data Model
+Screens never call `initDatabase` or fetch lists directly; they consume `useReceipts()`. `status === 'initializing'` drives first-load skeletons.
 
-### 4.1 Receipt Type (runtime shape)
-The app stores receipts using this core shape (see `types/receipt.ts`):
-- `merchant_name: string | null`
-- `receipt_date: string | null` (ISO `YYYY-MM-DD`)
-- `receipt_number: string | null`
-- `invoice_type: 'retail' | 'restaurant' | 'utility' | 'service' | 'unknown'`
-- `items: { name: string; quantity: number | null; price: number }[]`
-- `subtotal: number | null`
-- `tax: number | null`
-- `total: number` (required for storage; API may return null → app defaults)
-- `currency: string` (e.g., `BDT`)
-- `payment_method: string | null`
-- `confidence_score: number` (0..1)
-- `image_uri: string`
-- `raw_text: string | null` (reserved for future OCR text)
-- `error_message: string | null`
-- `created_at: string` (ISO timestamp)
+### 3.3 AI Vision (`services/ai-vision.ts`)
 
-### 4.2 SQLite Schema
-The SQLite table is created in `services/storage.ts`:
-- Table: `receipts`
-- `items` is stored as JSON text
-- Indexes exist for `created_at`, `invoice_type`, and `merchant_name`
+Public API (only two exports):
 
----
+```ts
+validateImage(imageUri): Promise<{ valid: boolean; error?: string }>
+parseReceiptWithRetry(imageUri, maxRetries = 3): Promise<AIReceiptResponse>
+```
 
-## 5) AI Extraction (Groq Vision)
+Internals worth knowing:
 
-### 5.1 Model
-Default model:
-- `meta-llama/llama-4-scout-17b-16e-instruct`
+- **Endpoint**: `https://openrouter.ai/api/v1/chat/completions`, model `google/gemini-2.5-flash` (single `MODEL_ID` constant), JSON mode, temperature 0, base64 `image_url` data URI.
+- **Auth**: `EXPO_PUBLIC_OPENROUTER_API_KEY` env var. Requests carry `HTTP-Referer` / `X-Title` attribution headers.
+- **Prompt**: extensive multilingual prompt with a Bangla alphabet reference, handwriting-recognition guidance, and Bangla→English numeral conversion rules. Retry attempts 2+ use a harder "second pass" handwriting prompt.
+- **Retry**: image is processed once and reused across attempts; exponential backoff (2s, 4s); the best-scoring result is kept if no attempt passes the acceptance gate (`total` present and calibrated confidence ≥ 0.45). **401/402 responses abort immediately** (bad key / no credits — retrying can't help).
+- **Normalization**: invalid `invoice_type` → `unknown`; dates → ISO `YYYY-MM-DD` (handles DMY, 2-digit years, Bangla digits); confidence clamped to 0..1 and recalibrated against field completeness and math consistency; missing values → `null`. Parse failures return a safe error object — the function never throws.
+- **Image constraints**: ≤4MB base64 (auto-compressed via `expo-image-manipulator`, 3-tier cascade), ≤33MP, ≤20MB file.
 
-### 5.2 Request Format
-The app calls Groq’s OpenAI-compatible endpoint:
-- `POST https://api.groq.com/openai/v1/chat/completions`
-- Sends:
-  - A strict instruction prompt requesting **valid JSON only**
-  - An `image_url` with `data:image/jpeg;base64,...`
-  - `response_format: { "type": "json_object" }` for JSON mode
+### 3.4 Storage (`services/storage.ts`)
 
-### 5.3 Normalization & Safety
-After response:
-- Coerces invalid `invoice_type` to `unknown`
-- Normalizes `receipt_date` into ISO `YYYY-MM-DD` when possible
-- Normalizes `confidence_score` into 0..1
-- Ensures `items` is always an array
-- Missing values become `null`
-- If parsing fails, returns a safe object with `invoice_type: 'unknown'` and `error_message`
+SQLite (`expo-sqlite`), table `receipts`; `items` stored as JSON text; indexes on `created_at`, `invoice_type`, `merchant_name`. Full CRUD plus `getReceiptStats()` and `searchReceipts(query)`. Includes stale-connection retry/re-init logic for the Android `NativeDatabase.execAsync` NPE.
 
-### 5.4 Image Constraints
-Groq Vision constraints (per Groq docs):
-- Max base64 payload: **4MB**
-- Max image resolution: **33 megapixels**
-- Max image URL size: **20MB**
+### 3.5 Export (`services/export.ts`)
 
-The app validates file existence and checks resolution. If the base64 is too large, it errors with a clear message (future improvement: auto-resize with `expo-image-manipulator`).
+JSON and CSV (per-receipt and bulk, plus a flat items CSV), written via `expo-file-system/legacy` and shared with `expo-sharing`.
 
-Docs: `https://console.groq.com/docs/vision`
+### 3.6 Types (`types/receipt.ts`)
+
+`Receipt`, `ReceiptInput`, `LineItem`, `AIReceiptResponse` (the normalized API result — `total` nullable here, non-null in `Receipt`), `ReceiptFilter`, `ReceiptStats`, `ProcessingState`.
 
 ---
 
-## 6) Main User Flows
+## 4) Theming
 
-### 6.1 Capture → Parse → Save
-1. User opens **Scan** tab.
-2. User captures a photo or selects from gallery.
-3. App validates image (exists, resolution, size constraints).
-4. App calls Groq Vision to extract structured JSON.
-5. App stores the receipt in SQLite.
-6. App shows a success screen with a preview and link to details.
+`constants/theme.ts` defines the design tokens — every color in the app comes from here, in light/dark pairs:
 
-### 6.2 History → Detail → Export
-1. User opens **History** tab.
-2. User filters by `invoice_type` and/or searches by merchant name.
-3. User opens a receipt detail page.
-4. User can:
-   - View image
-   - Preview JSON schema in-app
-   - Export JSON or CSV and share
+| Token group | Tokens |
+|---|---|
+| Base | `text`, `background`, `tint`, `icon`, `textSecondary` |
+| Surfaces | `surface`, `surfaceSecondary`, `card`, `border`, `overlay`, `skeleton` |
+| Status | `success`, `danger`, `warning`, `info` |
+| Accents | `accentOrange`, `accentPurple`, `neutral` |
+| Layout | `Spacing` (4–24), `Radius` (8/12/16/pill) |
 
----
+Supporting modules:
 
-## 7) Screens
+- `constants/receipt-ui.ts` — invoice-type icons/labels/colors (single source; `getInvoiceTypeColor(type, colors)` resolves per-scheme)
+- `utils/format.ts` — `formatCurrency`, `formatDate`
+- `components/ui/icon-symbol.tsx` — SF Symbols on iOS, MaterialIcons elsewhere. `name` is strictly typed (`IconSymbolName`); a new icon must be added to `MAPPING` or the build fails — this is what keeps Android from rendering "?" icons.
+- `components/ui/skeleton.tsx` — `Skeleton` + `ReceiptCardSkeleton` pulse placeholders (reanimated)
 
-### 7.1 Dashboard (`app/(tabs)/index.tsx`)
-- High-level stats (total receipts, this month, total amount)
-- Quick actions (Scan Receipt, View History)
-- Recent receipts list
-
-### 7.2 Capture (`app/(tabs)/capture.tsx`)
-- Camera/gallery capture via `CameraCapture`
-- Loading state during AI processing
-- Error state with “Try Again” or “Save Anyway”
-
-### 7.3 History (`app/(tabs)/history.tsx`)
-- FlatList of receipts
-- Filter chips by invoice type
-- Search by merchant name
-- Export all as JSON/CSV
-
-### 7.4 Receipt Detail (`app/receipt/[id].tsx`)
-- Image preview (tap to enlarge)
-- JSON schema preview (modal)
-- Export actions: JSON / CSV / New scan
+Rule of thumb: **no hardcoded hex colors in screens or components** — add a token instead.
 
 ---
 
-## 8) Environment & Secrets
+## 5) Screens & UX details
 
-### 8.1 Local Dev
-Set your Groq key in your environment (Expo public env vars are preferred for client-side use):
-- `EXPO_PUBLIC_GROQ_API_KEY=...`
-
-Note: If you change the key name in code, ensure your `.env` and EAS secrets match.
-
-### 8.2 Production (EAS)
-Use EAS Secrets to provide the API key at build time.
+- Safe areas come from `useSafeAreaInsets()` (provider mounted at root) — no hardcoded top padding.
+- Haptics: shutter (`impactAsync Medium`), scan success/failure (`notificationAsync`), filter chips (`selectionAsync`), delete confirm (`Warning`).
+- `expo-image` used everywhere with `transition`, and blurhash `placeholder` in list cards.
+- Edit modal (`components/receipt/receipt-edit-modal.tsx`): `KeyboardAvoidingView` on iOS; date is a text field validated as `YYYY-MM-DD` on save; totals recompute via a pure `withTotals` helper inside functional state updates.
 
 ---
 
-## 9) Development Builds
-This project uses `expo-dev-client` for development builds.
+## 6) Environment & Secrets
 
-Typical commands:
-- `pnpm start`
-- `npm run development-builds` (workflow) or `eas build --profile development --platform android`
-
----
-
-## 10) Troubleshooting
-
-### 10.1 “expo-dev-client not installed”
-Install:
-- `npx expo install expo-dev-client`
-
-### 10.2 SQLite NativeDatabase.execAsync rejected / NullPointerException
-This can happen if the DB handle becomes stale. The storage layer includes connection re-initialization and retry logic. If you still see it:
-- Restart the app
-- Clear the dev client cache
-- Ensure `expo-sqlite` is installed and the config plugin is present in `app.json`
-
-### 10.3 Icons missing on Android
-Ensure SF Symbol names used in `IconSymbol` are mapped to MaterialIcons in:
-- `components/ui/icon-symbol.tsx`
+- **Local dev**: `EXPO_PUBLIC_OPENROUTER_API_KEY` in `.env` / `.env.local` (see `.env.example`). Both files are gitignored.
+- **EAS builds**: set the same variable as an EAS project env var — see [MAINTENANCE.md](MAINTENANCE.md).
+- Note: `EXPO_PUBLIC_*` vars are embedded in the client bundle. Anyone with the binary can extract the key — use a spend-capped OpenRouter key.
 
 ---
 
-## 11) Future Improvements (Suggested)
-- Auto-resize/compress images using `expo-image-manipulator` to stay under 4MB
-- Add manual edit UI for extracted fields (especially for low confidence)
-- Add optional cloud sync (Supabase/Firebase) for team workflows
-- Add batch import and background processing queue
-- Add per-field confidence scores (not just a global score)
+## 7) Troubleshooting
 
+- **"OpenRouter API key not found"** — `.env` missing or dev server started before the var was added; restart with `pnpm start --clear`.
+- **402 error on scan** — OpenRouter credits exhausted; top up or swap the key.
+- **SQLite `NativeDatabase.execAsync` NPE** — stale DB handle; storage layer retries automatically. If persistent: restart the app, clear the dev client cache.
+- **App won't run in Expo Go** — expected; build a dev client (`npm run development-builds`).
+- **Icon renders as "?" on Android** — the SF Symbol name is missing from `MAPPING` in `components/ui/icon-symbol.tsx` (the strict type should have caught this at compile time).

@@ -1,108 +1,70 @@
 # AI Receipt Scanner
 
-A mobile application that captures receipt images and automatically extracts structured financial data using AI-powered OCR (Groq Vision API with Llama 4 Scout model).
+A mobile app that photographs receipts and automatically extracts structured financial data using AI vision (Google Gemini 2.5 Flash via [OpenRouter](https://openrouter.ai)). Optimized for English and Bengali/Bangla receipts, including handwriting.
 
 ## Features
 
 - **Capture Receipts**: Take photos using the camera or import from gallery
-- **AI-Powered Extraction**: Automatically extracts merchant name, date, line items, totals, and more
+- **AI-Powered Extraction**: Extracts merchant name, date, line items, totals, and more — with multilingual (English + Bangla) and handwriting support
 - **Invoice Type Detection**: Classifies receipts as retail, restaurant, utility, service, or unknown
-- **Local Storage**: Stores all receipts locally using SQLite
-- **Export Options**: Export data as JSON or CSV (Google Sheets compatible)
-- **Dashboard**: View statistics and recent receipts at a glance
+- **Local Storage**: All receipts stored on-device in SQLite (no cloud)
+- **Manual Editing**: Review and correct extracted fields before relying on them
+- **Export Options**: JSON or CSV (Google Sheets compatible)
+- **Dashboard**: Statistics and recent receipts at a glance
 - **Search & Filter**: Find receipts by merchant name or filter by type
+- **OTA Updates**: Ship JS updates without a store release (Settings tab)
 
-## Extracted Data Fields
-
-For each receipt, the app extracts:
-- Merchant/Store Name
-- Date
-- Receipt Number
-- Invoice Type
-- Line Items (name, quantity, price)
-- Subtotal, Tax, Total
-- Currency
-- Payment Method
-- Confidence Score
-
-## Setup
+## Quickstart
 
 ### Prerequisites
 
-- Node.js 18+
-- pnpm (recommended) or npm
-- Expo CLI
-- iOS Simulator or Android Emulator (for development builds)
-- Groq API Key (get one from [console.groq.com](https://console.groq.com/keys))
+- Node.js 18+ and pnpm
+- An OpenRouter API key ([openrouter.ai/keys](https://openrouter.ai/keys))
+- iOS Simulator, Android Emulator, or a physical device with a **development build** installed — the app uses native modules (camera, SQLite), so **Expo Go will not work**
 
-### Installation
+### Setup
 
-1. Clone the repository and install dependencies:
+1. Install dependencies:
 
 ```bash
 pnpm install
 ```
 
-2. Create a `.env` file in the project root:
+2. Create a `.env` file (see `.env.example`):
 
 ```env
-EXPO_PUBLIC_GROQ_API_KEY=your_groq_api_key_here
+EXPO_PUBLIC_OPENROUTER_API_KEY=sk-or-...
 ```
 
-3. Start the development server:
+3. Start the dev server:
 
 ```bash
 pnpm start
 ```
 
-### Development Build
-
-This app requires native camera access, so you'll need a development build (Expo Go won't work for full functionality):
+4. If you don't have a development build yet:
 
 ```bash
 npm run development-builds
 ```
 
-## Project Structure
+## Scripts
 
-```
-app/
-├── (tabs)/
-│   ├── _layout.tsx      # Tab navigation
-│   ├── index.tsx        # Dashboard screen
-│   ├── capture.tsx      # Camera/upload screen
-│   └── history.tsx      # Receipt history
-├── receipt/
-│   └── [id].tsx         # Receipt detail view
-└── _layout.tsx          # Root layout
+| Script | What it does |
+|---|---|
+| `pnpm start` | Start the Expo dev server |
+| `npx expo lint` | ESLint |
+| `npx tsc --noEmit` | Typecheck |
+| `npm run development-builds` | EAS workflow: build dev clients |
+| `npm run build:preview` | EAS preview build (both platforms) |
+| `npm run draft` | EAS workflow: publish preview update |
+| `npm run deploy` | EAS workflow: deploy to production |
 
-services/
-├── groq-vision.ts       # Groq API integration
-├── storage.ts           # SQLite database operations
-└── export.ts            # JSON/CSV export
+## Documentation
 
-components/
-├── receipt/
-│   ├── camera-capture.tsx
-│   ├── receipt-card.tsx
-│   ├── receipt-preview.tsx
-│   └── line-item.tsx
-└── ui/
-
-types/
-└── receipt.ts           # TypeScript interfaces
-```
-
-## API Reference
-
-### Groq Vision API
-
-This app uses the Llama 4 Scout model (`meta-llama/llama-4-scout-17b-16e-instruct`) for receipt extraction.
-
-**Limitations:**
-- Max image size: 4MB (base64 encoded)
-- Max resolution: 33 megapixels
-- Max 5 images per request
+- [APP_DOC.md](APP_DOC.md) — architecture, data flow, module reference, theming
+- [MAINTENANCE.md](MAINTENANCE.md) — releases, OTA updates, key rotation, model swaps, upgrades
+- [CLAUDE.md](CLAUDE.md) — guidance for AI coding assistants
 
 ## Sample Output
 
@@ -112,13 +74,7 @@ This app uses the Llama 4 Scout model (`meta-llama/llama-4-scout-17b-16e-instruc
   "receipt_date": "2025-01-12",
   "receipt_number": "R-93821",
   "invoice_type": "retail",
-  "items": [
-    {
-      "name": "Milk",
-      "quantity": 1,
-      "price": 50
-    }
-  ],
+  "items": [{ "name": "Milk", "quantity": 1, "price": 50 }],
   "subtotal": 50,
   "tax": 5,
   "total": 55,
@@ -128,21 +84,9 @@ This app uses the Llama 4 Scout model (`meta-llama/llama-4-scout-17b-16e-instruc
 }
 ```
 
-## Scripts
-
-- `pnpm start` - Start the development server
-- `pnpm run development-builds` - Create development builds
-- `pnpm run draft` - Publish preview update
-- `pnpm run deploy` - Deploy to production
-
 ## Technologies
 
-- **Framework**: Expo SDK 54 / React Native
-- **Navigation**: Expo Router (file-based routing)
-- **Database**: expo-sqlite
-- **AI/OCR**: Groq Vision API (Llama 4 Scout)
-- **Camera**: expo-camera, expo-image-picker
-- **Export**: expo-file-system, expo-sharing
+Expo SDK 54 / React Native · Expo Router · expo-sqlite · OpenRouter (Gemini 2.5 Flash) · expo-camera / expo-image-picker · expo-updates (OTA)
 
 ## License
 
