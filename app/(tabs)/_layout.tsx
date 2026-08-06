@@ -5,7 +5,7 @@
 
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -70,15 +70,9 @@ export default function TabLayout() {
         name="capture"
         options={{
           title: 'Scan',
-          tabBarIcon: () => (
-            <View style={[styles.scanButton, { backgroundColor: colors.tint }]}>
-              <IconSymbol size={24} name="camera.fill" color="#fff" />
-            </View>
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="camera.fill" color={color} />
           ),
-          tabBarLabel: () => null, // Hide label for center button
-          tabBarItemStyle: {
-            justifyContent: 'center', // center the circle vertically in the pill
-          },
         }}
       />
       <Tabs.Screen
@@ -110,13 +104,3 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  scanButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
