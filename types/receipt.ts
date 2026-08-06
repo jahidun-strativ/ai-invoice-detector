@@ -92,6 +92,7 @@ export interface ReceiptStats {
   total_amount: number;
   this_month_count: number;
   this_month_amount: number;
+  needs_review_count: number;
   by_type: Record<InvoiceType, number>;
   by_currency: Record<string, number>;
 }

@@ -142,7 +142,10 @@ export function CameraCapture({
             <View style={styles.processingContainer}>
               <ActivityIndicator size="large" color={colors.tint} />
               <Text style={[styles.processingText, { color: colors.text }]}>
-                Processing receipt...
+                Extracting data with AI…
+              </Text>
+              <Text style={[styles.processingHint, { color: colors.textSecondary }]}>
+                Reading merchant, items, and totals
               </Text>
             </View>
           ) : (
@@ -397,6 +400,10 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   processingText: {
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  processingHint: {
+    fontSize: 14,
   },
 });

@@ -98,40 +98,25 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <Animated.View entering={FadeIn.duration(300)} style={styles.statsGrid}>
-            {/* Hero: total spent */}
+            {/* Hero: documents digitized */}
             <View style={[styles.heroCard, { backgroundColor: colors.heroBg }]}>
               <View style={styles.heroTopRow}>
                 <Text style={[styles.heroLabel, { color: colors.heroTextMuted }]}>
-                  Total Spent
+                  Receipts Digitized
                 </Text>
                 <View style={styles.heroIconChip}>
-                  <IconSymbol name="banknote.fill" size={18} color="#fff" />
+                  <IconSymbol name="doc.text.fill" size={18} color="#fff" />
                 </View>
               </View>
               <Text style={[styles.heroAmount, { color: colors.heroText }]}>
-                {formatCurrency(stats?.total_amount ?? 0)}
+                {stats?.total_count ?? 0}
               </Text>
               <Text style={[styles.heroSub, { color: colors.heroTextMuted }]}>
-                across {stats?.total_count ?? 0} receipt
-                {(stats?.total_count ?? 0) !== 1 ? 's' : ''}
+                {formatCurrency(stats?.total_amount ?? 0)} total recorded value
               </Text>
             </View>
 
             {/* Stat tiles */}
-            <View style={[styles.statTile, cardSurface, { width: cardWidth }]}>
-              <View style={[styles.statIcon, { backgroundColor: colors.info + '1A' }]}>
-                <IconSymbol name="doc.text.fill" size={20} color={colors.info} />
-              </View>
-              <View style={styles.statTileText}>
-                <Text style={[styles.statValue, { color: colors.text }]}>
-                  {stats?.total_count ?? 0}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                  Receipts
-                </Text>
-              </View>
-            </View>
-
             <View style={[styles.statTile, cardSurface, { width: cardWidth }]}>
               <View style={[styles.statIcon, { backgroundColor: colors.success + '1A' }]}>
                 <IconSymbol name="calendar" size={20} color={colors.success} />
@@ -145,6 +130,27 @@ export default function DashboardScreen() {
                 </Text>
               </View>
             </View>
+
+            <TouchableOpacity
+              style={[styles.statTile, cardSurface, { width: cardWidth }]}
+              onPress={() => router.push('/(tabs)/history')}
+            >
+              <View style={[styles.statIcon, { backgroundColor: colors.warning + '1A' }]}>
+                <IconSymbol
+                  name="exclamationmark.triangle.fill"
+                  size={20}
+                  color={colors.warning}
+                />
+              </View>
+              <View style={styles.statTileText}>
+                <Text style={[styles.statValue, { color: colors.text }]}>
+                  {stats?.needs_review_count ?? 0}
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  Needs Review
+                </Text>
+              </View>
+            </TouchableOpacity>
           </Animated.View>
         )}
 
@@ -222,9 +228,11 @@ export default function DashboardScreen() {
               <ReceiptCardSkeleton />
             </View>
           ) : recentReceipts.length === 0 ? (
-            <View style={styles.emptyReceipts}>
-              <IconSymbol name="doc.text.fill" size={48} color={colors.icon} />
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+            <View style={[styles.emptyReceipts, cardSurface, { borderRadius: 20 }]}>
+              <View style={[styles.emptyIconCircle, { backgroundColor: colors.tint + '14' }]}>
+                <IconSymbol name="doc.text.fill" size={28} color={colors.tint} />
+              </View>
+              <Text style={[styles.emptyText, { color: colors.text }]}>
                 No receipts yet
               </Text>
               <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
@@ -434,6 +442,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
     gap: 8,
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   emptyText: {
     fontSize: 16,

@@ -7,7 +7,11 @@ import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { Image } from 'expo-image';
 import { Receipt } from '@/types/receipt';
 import { Colors } from '@/constants/theme';
-import { INVOICE_TYPE_ICONS, getInvoiceTypeColor } from '@/constants/receipt-ui';
+import {
+  INVOICE_TYPE_ICONS,
+  INVOICE_TYPE_LABELS,
+  getInvoiceTypeColor,
+} from '@/constants/receipt-ui';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { formatCurrency, formatDate } from '@/utils/format';
@@ -27,9 +31,10 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
 
   const typeColor = getInvoiceTypeColor(receipt.invoice_type, colors);
   const typeIcon = INVOICE_TYPE_ICONS[receipt.invoice_type];
+  const typeLabel = INVOICE_TYPE_LABELS[receipt.invoice_type];
 
   const hasError = !!receipt.error_message;
-  const isLowConfidence = receipt.confidence_score < 0.5;
+  const needsReview = hasError || receipt.confidence_score < 0.5;
 
   return (
     <TouchableOpacity
@@ -40,59 +45,66 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
           borderColor: colors.border,
           borderWidth: StyleSheet.hairlineWidth,
         },
-        hasError && { borderColor: colors.danger, borderWidth: 1 },
       ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
       {/* Thumbnail */}
-      <View style={styles.thumbnailContainer}>
-        <Image
-          source={{ uri: receipt.image_uri }}
-          style={styles.thumbnail}
-          contentFit="cover"
-          transition={200}
-          placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-        />
-        <View style={[styles.typeBadge, { backgroundColor: typeColor }]}>
-          <IconSymbol name={typeIcon} size={14} color="#fff" />
-        </View>
-      </View>
+      <Image
+        source={{ uri: receipt.image_uri }}
+        style={styles.thumbnail}
+        contentFit="cover"
+        transition={200}
+        placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+      />
 
       {/* Content */}
       <View style={styles.content}>
-        <View style={styles.header}>
+        <View style={styles.topRow}>
           <Text
             style={[styles.merchantName, { color: colors.text }]}
             numberOfLines={1}
           >
             {receipt.merchant_name || 'Unknown Merchant'}
           </Text>
-          {(hasError || isLowConfidence) && (
-            <IconSymbol
-              name="exclamationmark.triangle.fill"
-              size={16}
-              color={hasError ? colors.danger : colors.warning}
-            />
-          )}
-        </View>
-
-        <Text style={[styles.date, { color: colors.icon }]}>{formattedDate}</Text>
-
-        <View style={styles.footer}>
-          <Text style={[styles.itemCount, { color: colors.icon }]}>
-            {receipt.items.length} item{receipt.items.length !== 1 ? 's' : ''}
-          </Text>
-          <Text style={[styles.total, { color: colors.tint }]}>
+          <Text style={[styles.total, { color: colors.text }]}>
             {formattedTotal}
           </Text>
         </View>
 
-        {hasError && (
-          <Text style={[styles.errorText, { color: colors.danger }]} numberOfLines={1}>
-            {receipt.error_message}
-          </Text>
-        )}
+        <Text style={[styles.meta, { color: colors.textSecondary }]}>
+          {formattedDate} · {receipt.items.length} item
+          {receipt.items.length !== 1 ? 's' : ''}
+        </Text>
+
+        <View style={styles.chipRow}>
+          <View style={[styles.chip, { backgroundColor: typeColor + '1A' }]}>
+            <IconSymbol name={typeIcon} size={12} color={typeColor} />
+            <Text style={[styles.chipText, { color: typeColor }]}>{typeLabel}</Text>
+          </View>
+          {needsReview && (
+            <View
+              style={[
+                styles.chip,
+                { backgroundColor: (hasError ? colors.danger : colors.warning) + '1A' },
+              ]}
+            >
+              <IconSymbol
+                name="exclamationmark.triangle.fill"
+                size={12}
+                color={hasError ? colors.danger : colors.warning}
+              />
+              <Text
+                style={[
+                  styles.chipText,
+                  { color: hasError ? colors.danger : colors.warning },
+                ]}
+              >
+                {hasError ? 'Failed' : 'Review'}
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Delete button */}
@@ -105,7 +117,7 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
           }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <IconSymbol name="trash.fill" size={18} color={colors.danger} />
+          <IconSymbol name="trash.fill" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
       )}
     </TouchableOpacity>
@@ -115,74 +127,64 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
+    alignItems: 'center',
     padding: 12,
     marginHorizontal: 16,
     marginVertical: 6,
     borderRadius: 18,
+    gap: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
   },
-  thumbnailContainer: {
-    position: 'relative',
-    width: 60,
-    height: 80,
-    marginRight: 12,
-  },
   thumbnail: {
-    width: 60,
-    height: 80,
+    width: 56,
+    height: 72,
     borderRadius: 12,
-  },
-  typeBadge: {
-    position: 'absolute',
-    bottom: -4,
-    right: -4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   content: {
     flex: 1,
-    justifyContent: 'space-between',
   },
-  header: {
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    gap: 12,
   },
   merchantName: {
     flex: 1,
     fontSize: 16,
     fontWeight: '600',
   },
-  date: {
+  total: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  meta: {
     fontSize: 13,
     marginTop: 2,
   },
-  footer: {
+  chipRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: 6,
     marginTop: 8,
   },
-  itemCount: {
-    fontSize: 13,
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
-  total: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  errorText: {
-    fontSize: 12,
-    marginTop: 4,
+  chipText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   deleteButton: {
     justifyContent: 'center',
-    paddingLeft: 12,
+    paddingLeft: 4,
   },
 });

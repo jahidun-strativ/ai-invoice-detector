@@ -361,11 +361,18 @@ export async function getReceiptStats(): Promise<ReceiptStats> {
     byCurrency[row.currency] = row.amount;
   }
 
+  // Receipts that need a human look (low confidence or extraction error)
+  const needsReview = await database.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM receipts
+     WHERE confidence_score < 0.5 OR error_message IS NOT NULL`
+  );
+
   return {
     total_count: totals?.count ?? 0,
     total_amount: totals?.amount ?? 0,
     this_month_count: monthlyTotals?.count ?? 0,
     this_month_amount: monthlyTotals?.amount ?? 0,
+    needs_review_count: needsReview?.count ?? 0,
     by_type: byType,
     by_currency: byCurrency,
   };

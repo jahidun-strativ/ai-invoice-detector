@@ -198,9 +198,11 @@ export default function HistoryScreen() {
   // Render empty state
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <IconSymbol name="doc.text.fill" size={64} color={colors.icon} />
+      <View style={[styles.emptyIconCircle, { backgroundColor: colors.tint + '14' }]}>
+        <IconSymbol name="doc.text.fill" size={32} color={colors.tint} />
+      </View>
       <ThemedText style={styles.emptyTitle}>No Receipts Found</ThemedText>
-      <Text style={[styles.emptyMessage, { color: colors.icon }]}>
+      <Text style={[styles.emptyMessage, { color: colors.textSecondary }]}>
         {searchQuery
           ? 'Try a different search term'
           : 'Capture your first receipt to get started'}
@@ -383,6 +385,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
     marginTop: 60,
+  },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   emptyTitle: {
     fontSize: 20,
