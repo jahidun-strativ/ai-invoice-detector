@@ -9,7 +9,7 @@ import { ReceiptPreview } from '@/components/receipt/receipt-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 24,
-    fontWeight: '700',
+    fontFamily: Type.bold,
     marginTop: 16,
   },
   errorMessage: {
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
   },
   successTitle: {
     fontSize: 22,
-    fontWeight: '700',
+    fontFamily: Type.bold,
   },
   previewScroll: {
     flex: 1,
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 16,
     gap: 12,
-    paddingBottom: 32,
+    paddingBottom: 120,
   },
   button: {
     flex: 1,
@@ -350,6 +350,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
 });

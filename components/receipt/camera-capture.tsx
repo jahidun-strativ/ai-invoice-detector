@@ -17,7 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface CameraCaptureProps {
@@ -137,7 +137,7 @@ export function CameraCapture({
           />
         </View>
 
-        <View style={[styles.previewActions, { paddingBottom: insets.bottom + 16 }]}>
+        <View style={[styles.previewActions, { paddingBottom: insets.bottom + 110 }]}>
           {isProcessing ? (
             <View style={styles.processingContainer}>
               <ActivityIndicator size="large" color={colors.tint} />
@@ -205,7 +205,7 @@ export function CameraCapture({
         </View>
 
         {/* Bottom controls */}
-        <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 24 }]}>
+        <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 110 }]}>
           <TouchableOpacity style={styles.galleryButton} onPress={pickImage}>
             <IconSymbol name="photo.on.rectangle" size={32} color="#fff" />
           </TouchableOpacity>
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   permissionButtonText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   secondaryButton: {
     padding: 16,
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   processingContainer: {
     alignItems: 'center',
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   },
   processingText: {
     fontSize: 17,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   processingHint: {
     fontSize: 14,

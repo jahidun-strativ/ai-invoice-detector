@@ -6,7 +6,7 @@
 import { StyleSheet, View, Text, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Receipt } from '@/types/receipt';
-import { Colors, ThemeColors } from '@/constants/theme';
+import { Colors, ThemeColors, Type } from '@/constants/theme';
 import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   },
   merchantName: {
     fontSize: 24,
-    fontWeight: '700',
+    fontFamily: Type.bold,
     marginBottom: 4,
   },
   date: {
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   infoRow: {
     flexDirection: 'row',
@@ -267,11 +267,11 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: Type.medium,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
     marginBottom: 12,
   },
   itemsContainer: {
@@ -302,11 +302,11 @@ const styles = StyleSheet.create({
   },
   grandTotalLabel: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: Type.bold,
   },
   grandTotalValue: {
     fontSize: 22,
-    fontWeight: '700',
+    fontFamily: Type.bold,
   },
   confidenceContainer: {
     marginTop: 16,
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   },
   confidenceValue: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
     marginTop: 8,
     textAlign: 'right',
   },

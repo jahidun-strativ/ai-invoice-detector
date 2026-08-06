@@ -5,7 +5,7 @@
 
 import { StyleSheet, View, Text } from 'react-native';
 import { LineItem } from '@/types/receipt';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatCurrency } from '@/utils/format';
 
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 15,
-    fontWeight: '500',
+    fontFamily: Type.medium,
   },
   quantity: {
     fontSize: 13,
@@ -65,6 +65,6 @@ const styles = StyleSheet.create({
   },
   price: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
 });

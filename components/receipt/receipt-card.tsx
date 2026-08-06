@@ -6,7 +6,7 @@
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { Image } from 'expo-image';
 import { Receipt } from '@/types/receipt';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import {
   INVOICE_TYPE_ICONS,
   INVOICE_TYPE_LABELS,
@@ -156,11 +156,11 @@ const styles = StyleSheet.create({
   merchantName: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   total: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: Type.bold,
   },
   meta: {
     fontSize: 13,
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   deleteButton: {
     justifyContent: 'center',

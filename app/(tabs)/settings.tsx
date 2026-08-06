@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { UpdateStatus } from '@/components/update-status';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const AI_MODEL_LABEL = 'Gemini 2.5 Flash (via OpenRouter)';
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: 40,
+    paddingBottom: 150,
   },
   header: {
     paddingHorizontal: 20,
@@ -113,12 +113,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     lineHeight: 38,
-    fontWeight: '800',
+    fontFamily: Type.heavy,
     letterSpacing: -0.5,
   },
   sectionLabel: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
     letterSpacing: 0.5,
     marginTop: 20,
     marginBottom: 8,
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     fontSize: 15,
-    fontWeight: '500',
+    fontFamily: Type.medium,
     flexShrink: 1,
   },
 });

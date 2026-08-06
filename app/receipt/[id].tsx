@@ -8,7 +8,7 @@ import { ReceiptPreview } from '@/components/receipt/receipt-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { exportAndShare } from '@/services/export';
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
   },
   jsonPreviewButtonText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   modalContainer: {
     flex: 1,
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontFamily: Type.bold,
   },
   modalCloseButton: {
     padding: 4,
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   modalActionButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   actionsContainer: {
     flexDirection: 'row',
@@ -533,6 +533,6 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
 });

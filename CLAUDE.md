@@ -35,6 +35,7 @@ Core data flow: **capture → validate → OpenRouter (Gemini 2.5 Flash) → nor
 ## Conventions
 
 - **Theming**: all colors come from tokens in `constants/theme.ts` (light/dark pairs: surface, card, border, success/danger/warning/info, etc.). Never hardcode hex colors in screens — add a token. Invoice-type icons/labels/colors live in `constants/receipt-ui.ts`; currency/date formatting in `utils/format.ts`.
+- **Typography**: Inter (loaded in the root layout via `@expo-google-fonts/inter`). Use the `Type` families from `constants/theme.ts` (`Type.semibold`, `Type.heavy`, …) instead of `fontWeight` — Android doesn't synthesize weights for custom fonts.
 - **Icons**: `components/ui/icon-symbol.tsx` maps SF Symbol names to MaterialIcons with a strict `IconSymbolName` type — new icons must be added to `MAPPING` or tsc fails (this prevents "?" icons on Android).
 - **Safe areas**: use `useSafeAreaInsets()` (provider in root layout), never hardcoded top padding.
 - Kebab-case file names, function components with hooks, TypeScript throughout.

@@ -17,6 +17,7 @@
     "build:preview": "eas build --platform all --profile preview"
   },
   "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.0.2",
     "@react-navigation/bottom-tabs": "^7.4.0",
@@ -32,6 +33,7 @@
     "expo-image": "~3.0.8",
     "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~17.0.10",
+    "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.8",
     "expo-media-library": "~18.2.1",
     "expo-router": "~6.0.8",

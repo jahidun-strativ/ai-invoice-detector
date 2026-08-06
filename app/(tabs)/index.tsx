@@ -13,6 +13,7 @@ import {
   RefreshControl,
   useWindowDimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +23,7 @@ import { ReceiptCard } from '@/components/receipt/receipt-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ReceiptCardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { INVOICE_TYPE_ICONS, INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { InvoiceType } from '@/types/receipt';
@@ -99,7 +100,12 @@ export default function DashboardScreen() {
         ) : (
           <Animated.View entering={FadeIn.duration(300)} style={styles.statsGrid}>
             {/* Hero: documents digitized */}
-            <View style={[styles.heroCard, { backgroundColor: colors.heroBg }]}>
+            <LinearGradient
+              colors={['#6D5DF6', '#4F46E5', '#4338CA']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
+            >
               <View style={styles.heroTopRow}>
                 <Text style={[styles.heroLabel, { color: colors.heroTextMuted }]}>
                   Receipts Digitized
@@ -114,7 +120,7 @@ export default function DashboardScreen() {
               <Text style={[styles.heroSub, { color: colors.heroTextMuted }]}>
                 {formatCurrency(stats?.total_amount ?? 0)} total recorded value
               </Text>
-            </View>
+            </LinearGradient>
 
             {/* Stat tiles */}
             <View style={[styles.statTile, cardSurface, { width: cardWidth }]}>
@@ -184,30 +190,6 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Quick Actions</ThemedText>
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: colors.tint }]}
-              onPress={() => router.push('/(tabs)/capture')}
-            >
-              <IconSymbol name="camera.fill" size={28} color="#fff" />
-              <Text style={styles.actionText}>Scan Receipt</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: colors.surface }]}
-              onPress={() => router.push('/(tabs)/history')}
-            >
-              <IconSymbol name="clock.fill" size={28} color={colors.tint} />
-              <Text style={[styles.actionTextDark, { color: colors.text }]}>
-                View History
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/* Recent Receipts */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -264,7 +246,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 150,
   },
   header: {
     flexDirection: 'row',
@@ -280,7 +262,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     lineHeight: 38,
-    fontWeight: '800',
+    fontFamily: Type.heavy,
     letterSpacing: -0.5,
   },
   scanButton: {
@@ -318,7 +300,7 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
     letterSpacing: 0.3,
   },
   heroIconChip: {
@@ -331,7 +313,7 @@ const styles = StyleSheet.create({
   },
   heroAmount: {
     fontSize: 34,
-    fontWeight: '800',
+    fontFamily: Type.heavy,
     letterSpacing: -0.8,
     marginTop: 12,
   },
@@ -371,7 +353,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 20,
-    fontWeight: '800',
+    fontFamily: Type.heavy,
     letterSpacing: -0.3,
   },
   statLabel: {
@@ -390,13 +372,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 19,
-    fontWeight: '700',
+    fontFamily: Type.bold,
     letterSpacing: -0.3,
     marginBottom: 12,
   },
   seeAllText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: Type.medium,
   },
   categoriesGrid: {
     flexDirection: 'row',
@@ -413,30 +395,10 @@ const styles = StyleSheet.create({
   },
   categoryCount: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   categoryLabel: {
     fontSize: 13,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionCard: {
-    flex: 1,
-    padding: 20,
-    borderRadius: 20,
-    alignItems: 'center',
-    gap: 10,
-  },
-  actionText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  actionTextDark: {
-    fontSize: 15,
-    fontWeight: '600',
   },
   emptyReceipts: {
     alignItems: 'center',
@@ -453,7 +415,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontFamily: Type.medium,
     marginTop: 8,
   },
   emptySubtext: {

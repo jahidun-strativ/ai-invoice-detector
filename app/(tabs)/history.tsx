@@ -23,7 +23,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ReceiptCard } from '@/components/receipt/receipt-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ReceiptCardSkeleton } from '@/components/ui/skeleton';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { exportAndShare } from '@/services/export';
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     lineHeight: 38,
-    fontWeight: '800',
+    fontFamily: Type.heavy,
     letterSpacing: -0.5,
   },
   exportButton: {
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: Type.medium,
   },
   countContainer: {
     flexDirection: 'row',
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   listContent: {
-    paddingBottom: 100,
+    paddingBottom: 150,
   },
   loadingContainer: {
     flex: 1,
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
     marginTop: 16,
   },
   emptyMessage: {
@@ -416,6 +416,6 @@ const styles = StyleSheet.create({
   emptyButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
 });

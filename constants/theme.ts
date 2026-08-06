@@ -77,3 +77,13 @@ export const Radius = {
   pill: 999,
 } as const;
 
+// Inter static families (loaded in app/_layout.tsx). Use these instead of
+// fontWeight — Android won't synthesize weights for custom fonts.
+export const Type = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+  heavy: 'Inter_800ExtraBold',
+} as const;
+

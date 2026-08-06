@@ -3,7 +3,7 @@
  * Displays OTA update status and allows manual update checking
  */
 
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useOTAUpdates } from '@/hooks/use-ota-updates';
 import React from 'react';
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   infoContainer: {
     marginBottom: 12,
@@ -199,6 +199,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
 });

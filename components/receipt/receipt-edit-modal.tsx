@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Receipt, ReceiptInput, InvoiceType, LineItem } from '@/types/receipt';
 
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
     flex: 1,
     textAlign: 'center',
   },
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   scrollView: {
     flex: 1,
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
     marginBottom: 12,
   },
   toggleRow: {
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: Type.medium,
     marginBottom: 6,
   },
   fieldError: {
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
   },
   totalInput: {
     borderWidth: 2,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
     fontSize: 18,
   },
   typeButtons: {
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   },
   typeButtonText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: Type.medium,
   },
   itemCard: {
     padding: 12,
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
   },
   itemNumber: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   removeButton: {
     padding: 4,
@@ -583,6 +583,6 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
 });
