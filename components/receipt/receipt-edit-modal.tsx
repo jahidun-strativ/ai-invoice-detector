@@ -3,6 +3,7 @@
  * Allows editing receipt data before saving/exporting
  */
 
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -14,7 +15,6 @@ import {
   Modal,
   Alert,
   KeyboardAvoidingView,
-  Platform,
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -45,7 +45,7 @@ export function ReceiptEditModal({
   const [formData, setFormData] = useState<ReceiptInput | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showItems, setShowItems] = useState(true);
-  const [dateError, setDateError] = useState<string | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Initialize form data when receipt changes
   useEffect(() => {
@@ -81,20 +81,6 @@ export function ReceiptEditModal({
       Alert.alert('Invalid Total', 'Total must be greater than 0');
       return;
     }
-
-    // Validate date format (kept as a plain text field)
-    // ponytail: text input + regex validation; upgrade path is
-    // @react-native-community/datetimepicker if a picker is ever needed
-    if (formData.receipt_date) {
-      const isValid =
-        /^\d{4}-\d{2}-\d{2}$/.test(formData.receipt_date) &&
-        !isNaN(new Date(formData.receipt_date).getTime());
-      if (!isValid) {
-        setDateError('Date must be in YYYY-MM-DD format');
-        return;
-      }
-    }
-    setDateError(null);
 
     setIsSaving(true);
     try {
@@ -182,11 +168,15 @@ export function ReceiptEditModal({
           </TouchableOpacity>
         </View>
 
-        <KeyboardAvoidingView
+        {/* behavior="padding" on BOTH platforms: with SDK 54 edge-to-edge,
+            Android's adjustResize no longer resizes the window, so the old
+            "undefined on Android" pattern silently does nothing. */}
+        <KeyboardAvoidingView style={styles.scrollView} behavior="padding">
+        <ScrollView
           style={styles.scrollView}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           {/* Basic Information */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Basic Information</Text>
@@ -204,22 +194,43 @@ export function ReceiptEditModal({
 
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: colors.icon }]}>Receipt Date</Text>
-              <TextInput
+              <TouchableOpacity
                 style={[
                   styles.input,
-                  { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
-                  !!dateError && { borderColor: colors.danger },
+                  styles.dateField,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
                 ]}
-                value={formData.receipt_date || ''}
-                onChangeText={(text) => {
-                  setDateError(null);
-                  updateField('receipt_date', text || null);
-                }}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.icon}
-              />
-              {dateError && (
-                <Text style={[styles.fieldError, { color: colors.danger }]}>{dateError}</Text>
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text
+                  style={{
+                    color: formData.receipt_date ? colors.text : colors.icon,
+                    fontSize: 16,
+                    fontFamily: Type.regular,
+                  }}
+                >
+                  {formData.receipt_date || 'Select date'}
+                </Text>
+                <IconSymbol name="calendar" size={18} color={colors.icon} />
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={
+                    formData.receipt_date
+                      ? new Date(formData.receipt_date)
+                      : new Date()
+                  }
+                  mode="date"
+                  onChange={(event, selected) => {
+                    setShowDatePicker(false);
+                    if (event.type === 'set' && selected) {
+                      updateField(
+                        'receipt_date',
+                        selected.toISOString().split('T')[0]
+                      );
+                    }
+                  }}
+                />
               )}
             </View>
 
@@ -512,9 +523,10 @@ const styles = StyleSheet.create({
     fontFamily: Type.medium,
     marginBottom: 6,
   },
-  fieldError: {
-    fontSize: 13,
-    marginTop: 6,
+  dateField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   input: {
     borderWidth: 1,

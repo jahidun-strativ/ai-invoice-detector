@@ -69,7 +69,8 @@
           "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to save receipt exports.",
           "savePhotosPermission": "Allow $(PRODUCT_NAME) to save exported files to your photos."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
