@@ -17,6 +17,7 @@ import {
   validateImage,
 } from '@/services/ai-vision';
 import { ProcessingState, Receipt, ReceiptInput } from '@/types/receipt';
+import { assessReceiptImage } from '@/utils/image-quality';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -42,6 +43,9 @@ export default function CaptureScreen() {
   const [capturedImageUri, setCapturedImageUri] = useState<string | null>(null);
   const [processedReceipt, setProcessedReceipt] = useState<Receipt | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // True when the on-device pre-check rejected the photo (blurry / dark /
+  // not a receipt) — renders "Process Anyway" instead of "Save Anyway"
+  const [qualityRejected, setQualityRejected] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
   // Reset the success screen when the user leaves the tab, so returning
@@ -55,22 +59,14 @@ export default function CaptureScreen() {
     }, [])
   );
 
-  // Handle image capture
-  const handleCapture = useCallback(async (imageUri: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setCapturedImageUri(imageUri);
+  // Run the AI extraction on an image that already passed (or overrode)
+  // the on-device pre-check
+  const processImage = useCallback(async (imageUri: string) => {
     setState('processing');
     setErrorMessage(null);
+    setQualityRejected(false);
 
     try {
-      // Validate image first
-      const validation = await validateImage(imageUri);
-      if (!validation.valid) {
-        setErrorMessage(validation.error || 'Invalid image');
-        setState('error');
-        return;
-      }
-
       // Extract structured data with the AI vision API
       const result = await parseReceiptWithRetry(imageUri);
 
@@ -107,12 +103,50 @@ export default function CaptureScreen() {
     }
   }, [addReceipt]);
 
+  // Handle image capture: cheap on-device checks first, so obviously bad
+  // photos never reach the AI (no wasted API calls)
+  const handleCapture = useCallback(
+    async (imageUri: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setCapturedImageUri(imageUri);
+      setState('processing');
+      setErrorMessage(null);
+      setQualityRejected(false);
+
+      // Hard constraints (file exists, size/resolution limits)
+      const validation = await validateImage(imageUri);
+      if (!validation.valid) {
+        setErrorMessage(validation.error || 'Invalid image');
+        setState('error');
+        return;
+      }
+
+      // Heuristic pre-check: blurry / too dark / doesn't look like a receipt
+      try {
+        const quality = await assessReceiptImage(imageUri);
+        if (!quality.ok) {
+          setErrorMessage(quality.reason);
+          setQualityRejected(true);
+          setState('error');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          return;
+        }
+      } catch {
+        // Analyzer failure must never block a scan — fall through to the AI
+      }
+
+      await processImage(imageUri);
+    },
+    [processImage]
+  );
+
   // Reset to capture new receipt
   const handleReset = useCallback(() => {
     setState('idle');
     setCapturedImageUri(null);
     setProcessedReceipt(null);
     setErrorMessage(null);
+    setQualityRejected(false);
   }, []);
 
   // View receipt details
@@ -196,9 +230,11 @@ export default function CaptureScreen() {
           <IconSymbol
             name="exclamationmark.triangle.fill"
             size={64}
-            color={colors.danger}
+            color={qualityRejected ? colors.warning : colors.danger}
           />
-          <ThemedText style={styles.errorTitle}>Processing Failed</ThemedText>
+          <ThemedText style={styles.errorTitle}>
+            {qualityRejected ? 'Check the Photo' : 'Processing Failed'}
+          </ThemedText>
           <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
             {errorMessage || 'Unable to process the receipt image'}
           </Text>
@@ -209,18 +245,33 @@ export default function CaptureScreen() {
               onPress={handleReset}
             >
               <IconSymbol name="camera.fill" size={20} color="#fff" />
-              <Text style={styles.buttonText}>Try Again</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, styles.secondaryButton, { borderColor: colors.border }]}
-              onPress={handleSaveWithError}
-            >
-              <IconSymbol name="square.and.arrow.down" size={20} color={colors.tint} />
-              <Text style={[styles.buttonText, { color: colors.tint }]}>
-                Save Anyway
+              <Text style={styles.buttonText}>
+                {qualityRejected ? 'Retake Photo' : 'Try Again'}
               </Text>
             </TouchableOpacity>
+
+            {qualityRejected && capturedImageUri ? (
+              // The detector isn't perfect — let the user override it
+              <TouchableOpacity
+                style={[styles.button, styles.secondaryButton, { borderColor: colors.border }]}
+                onPress={() => processImage(capturedImageUri)}
+              >
+                <IconSymbol name="doc.text.fill" size={20} color={colors.tint} />
+                <Text style={[styles.buttonText, { color: colors.tint }]}>
+                  Process Anyway
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.button, styles.secondaryButton, { borderColor: colors.border }]}
+                onPress={handleSaveWithError}
+              >
+                <IconSymbol name="square.and.arrow.down" size={20} color={colors.tint} />
+                <Text style={[styles.buttonText, { color: colors.tint }]}>
+                  Save Anyway
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </ThemedView>

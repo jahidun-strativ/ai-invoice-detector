@@ -23,7 +23,9 @@ Environment: `EXPO_PUBLIC_OPENROUTER_API_KEY` must be set (`.env` locally — se
 
 ## Architecture
 
-Core data flow: **capture → validate → OpenRouter (Gemini 2.5 Flash) → normalize → SQLite via context → export**.
+Core data flow: **capture → validate → on-device quality gate → OpenRouter (Gemini 2.5 Flash) → normalize → SQLite via context → export**.
+
+- `utils/image-quality.ts` — pre-flight heuristic (no AI, no native modules): rejects blurry/dark/non-receipt photos on a 160px thumbnail (Laplacian sharpness, brightness, bright-pixel and edge-density ratios) before any API call. Thresholds are hand-tuned constants at the top; capture offers "Process Anyway" as override.
 
 - `contexts/receipts-context.tsx` — **single source of truth**. `ReceiptsProvider` (mounted in root layout) owns DB init, the receipt list, recent receipts, stats, and filter/search state. All mutations (`addReceipt`, `updateReceiptById`, `removeReceipt`) go through it; screens consume `useReceipts()` and never call `initDatabase` or fetch lists directly. `status === 'initializing'` drives first-load skeletons.
 - `services/ai-vision.ts` — the AI layer. Exports only `validateImage` and `parseReceiptWithRetry`. OpenRouter chat completions (model in the single `MODEL_ID` constant), JSON mode, base64 image, prompt tuned for Bangla handwriting with numeral conversion. Retry with backoff and best-result tracking; 401/402 abort immediately. Normalizes everything (dates → ISO, invalid types → `'unknown'`, confidence recalibrated); returns a safe error object instead of throwing.
