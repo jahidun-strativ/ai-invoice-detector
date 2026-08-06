@@ -71,16 +71,14 @@ export default function TabLayout() {
         options={{
           title: 'Scan',
           tabBarIcon: () => (
-            <View
-              style={[
-                styles.scanButton,
-                { backgroundColor: colors.tint, borderColor: colors.card },
-              ]}
-            >
-              <IconSymbol size={26} name="camera.fill" color="#fff" />
+            <View style={[styles.scanButton, { backgroundColor: colors.tint }]}>
+              <IconSymbol size={24} name="camera.fill" color="#fff" />
             </View>
           ),
           tabBarLabel: () => null, // Hide label for center button
+          tabBarItemStyle: {
+            justifyContent: 'center', // center the circle vertically in the pill
+          },
         }}
       />
       <Tabs.Screen
@@ -115,17 +113,10 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   scanButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: -26, // float above the bar
-    borderWidth: 4, // ring matching the bar creates a cutout look
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
   },
 });

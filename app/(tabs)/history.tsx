@@ -319,10 +319,10 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   title: {
-    fontSize: 30,
-    lineHeight: 38,
-    fontFamily: Type.heavy,
-    letterSpacing: -0.5,
+    fontSize: 28,
+    lineHeight: 36,
+    fontFamily: Type.display,
+    letterSpacing: -0.3,
   },
   exportButton: {
     width: 44,

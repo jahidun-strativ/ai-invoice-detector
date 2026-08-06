@@ -1,62 +1,72 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Strativ brand design tokens, adapted for React Native from the official
+ * Strativ frontend design system (2024 brand guideline).
+ *
+ * Hard brand rules encoded here:
+ * - Accent is Strativ Orange #FE5001. One accent — no purple, no indigo.
+ * - "Black" is Warm Black #1A0E1C, never #000. Light-mode text is warm-black
+ *   at decreasing strength (hex-blended, since tokens get alpha-suffixed).
+ * - Dark mode uses the NEUTRAL dark scale (#0B0E13 family), not warm-black:
+ *   warm-black is only for small accents, never a full canvas.
+ * - No gradients anywhere. Solid fills only.
  */
 
-const tintColorLight = '#4F46E5'; // indigo-600
-const tintColorDark = '#818CF8'; // indigo-400, readable on dark backgrounds
+const brandOrange = '#FE5001';
 
 export const Colors = {
   light: {
-    text: '#0F1222',
-    background: '#F7F7FA',
-    tint: tintColorLight,
-    icon: '#6B7280',
-    tabIconDefault: '#9CA3AF',
-    tabIconSelected: tintColorLight,
-    surface: '#EEEFF4',
-    surfaceSecondary: '#E4E6EE',
+    text: '#1A0E1C', // warm black
+    background: '#F9FAFB',
+    tint: brandOrange,
+    icon: '#7F7880', // warm-black @ 56%
+    tabIconDefault: '#7F7880',
+    tabIconSelected: brandOrange,
+    surface: '#F2F4F7',
+    surfaceSecondary: '#E4E7EC',
     card: '#FFFFFF',
-    border: '#E6E8F0',
-    textSecondary: '#6B7280',
-    success: '#16A34A',
-    danger: '#DC2626',
-    warning: '#B45309',
-    info: '#2563EB',
-    accentOrange: '#EA580C',
-    accentPurple: '#7C3AED',
-    neutral: '#6B7280',
-    overlay: 'rgba(15,18,34,0.45)',
-    skeleton: '#E7E9F0',
-    // Hero surfaces keep the deep indigo in both schemes — white text on top
-    heroBg: '#4F46E5',
+    border: '#E4E7EC',
+    textSecondary: '#4C434E', // warm-black @ 78%
+    success: '#039855',
+    danger: '#D92D20',
+    warning: '#DC6803',
+    info: '#1570EF',
+    accentYellow: '#F9B70E',
+    accentTeal: '#0E9384',
+    accentViolet: '#7A5AF8', // data-viz only
+    neutral: '#475467',
+    overlay: 'rgba(26,14,28,0.5)', // warm-black scrim
+    skeleton: '#EAECF0',
+    heroBg: brandOrange, // solid orange filled tile — never a gradient
     heroText: '#FFFFFF',
     heroTextMuted: 'rgba(255,255,255,0.72)',
+    warmBlack: '#1A0E1C',
   },
   dark: {
-    text: '#F2F3F7',
-    background: '#0B0D12',
-    tint: tintColorDark,
-    icon: '#9AA0AE',
-    tabIconDefault: '#6B7280',
-    tabIconSelected: tintColorDark,
-    surface: '#161923',
-    surfaceSecondary: '#1E2230',
-    card: '#141722',
-    border: '#262B3B',
-    textSecondary: '#9AA0AE',
-    success: '#4ADE80',
-    danger: '#F87171',
-    warning: '#FBBF24',
-    info: '#60A5FA',
-    accentOrange: '#FB923C',
-    accentPurple: '#A78BFA',
-    neutral: '#9CA3AF',
+    text: '#F5F1F4',
+    background: '#0B0E13', // neutral dark canvas
+    tint: brandOrange,
+    icon: '#8E8D8F', // near-white @ 56%
+    tabIconDefault: '#8E8D8F',
+    tabIconSelected: brandOrange,
+    surface: '#1E232B',
+    surfaceSecondary: '#272D37',
+    card: '#161A21',
+    border: '#2A303A',
+    textSecondary: '#BDBAC0', // near-white @ 78%
+    success: '#12B76A',
+    danger: '#F04438',
+    warning: '#F79009',
+    info: '#53B1FD',
+    accentYellow: '#F9B70E',
+    accentTeal: '#2ED3B7',
+    accentViolet: '#9B8AFB', // data-viz only
+    neutral: '#98A2B3',
     overlay: 'rgba(0,0,0,0.6)',
-    skeleton: '#1D2130',
-    heroBg: '#4338CA',
+    skeleton: '#272D37',
+    heroBg: brandOrange,
     heroText: '#FFFFFF',
     heroTextMuted: 'rgba(255,255,255,0.72)',
+    warmBlack: '#1A0E1C',
   },
 };
 
@@ -77,13 +87,16 @@ export const Radius = {
   pill: 999,
 } as const;
 
-// Inter static families (loaded in app/_layout.tsx). Use these instead of
-// fontWeight — Android won't synthesize weights for custom fonts.
+// Two fonts only, per the brand guideline:
+// Expletus Sans for headings, Inter for everything else.
+// Use these families instead of fontWeight — Android won't synthesize
+// weights for custom fonts.
 export const Type = {
   regular: 'Inter_400Regular',
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
   heavy: 'Inter_800ExtraBold',
+  display: 'ExpletusSans_500Medium', // headings default
+  displayBold: 'ExpletusSans_700Bold', // headings that need punch
 } as const;
-

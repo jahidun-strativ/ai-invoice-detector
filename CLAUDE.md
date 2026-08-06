@@ -34,8 +34,9 @@ Core data flow: **capture → validate → OpenRouter (Gemini 2.5 Flash) → nor
 
 ## Conventions
 
-- **Theming**: all colors come from tokens in `constants/theme.ts` (light/dark pairs: surface, card, border, success/danger/warning/info, etc.). Never hardcode hex colors in screens — add a token. Invoice-type icons/labels/colors live in `constants/receipt-ui.ts`; currency/date formatting in `utils/format.ts`.
-- **Typography**: Inter (loaded in the root layout via `@expo-google-fonts/inter`). Use the `Type` families from `constants/theme.ts` (`Type.semibold`, `Type.heavy`, …) instead of `fontWeight` — Android doesn't synthesize weights for custom fonts.
+- **Branding (Strativ)**: the theme follows the official Strativ design system. Hard rules: accent is Strativ Orange `#FE5001` (one accent — no purple/indigo); **no gradients anywhere** (solid fills only); "black" is Warm Black `#1A0E1C`, never `#000`; dark mode uses the neutral dark scale (`#0B0E13` family), not warm-black; no emoji in product UI; the Strativ logo (assets in `assets/brand/`) must stay visible (dashboard header lockup). Category colors come from the Strativ data-viz palette in `constants/receipt-ui.ts` — never brand orange.
+- **Theming**: all colors come from tokens in `constants/theme.ts` (light/dark pairs: surface, card, border, success/danger/warning/info, etc.). Never hardcode hex colors in screens — add a token. Currency/date formatting in `utils/format.ts`.
+- **Typography**: two fonts only — Expletus Sans for headings (`Type.display`/`Type.displayBold`), Inter for everything else (loaded in the root layout). Use the `Type` families from `constants/theme.ts` instead of `fontWeight` — Android doesn't synthesize weights for custom fonts.
 - **Icons**: `components/ui/icon-symbol.tsx` maps SF Symbol names to MaterialIcons with a strict `IconSymbolName` type — new icons must be added to `MAPPING` or tsc fails (this prevents "?" icons on Android).
 - **Safe areas**: use `useSafeAreaInsets()` (provider in root layout), never hardcoded top padding.
 - Kebab-case file names, function components with hooks, TypeScript throughout.

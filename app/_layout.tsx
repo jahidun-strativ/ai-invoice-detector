@@ -1,4 +1,8 @@
 import {
+  ExpletusSans_500Medium,
+  ExpletusSans_700Bold,
+} from '@expo-google-fonts/expletus-sans';
+import {
   Inter_400Regular,
   Inter_500Medium,
   Inter_600SemiBold,
@@ -33,6 +37,8 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
     Inter_800ExtraBold,
+    ExpletusSans_500Medium,
+    ExpletusSans_700Bold,
   });
   const { checkAndApplyUpdate, isEnabled } = useOTAUpdates({
     checkOnMount: true,

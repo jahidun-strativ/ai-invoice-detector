@@ -13,7 +13,7 @@ import {
   RefreshControl,
   useWindowDimensions,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -66,13 +66,20 @@ export default function DashboardScreen() {
           />
         }
       >
-        {/* Header */}
+        {/* Header — "[Product] BY STRATIV" lockup */}
         <View style={[styles.header, { paddingTop: 16 }]}>
-          <View>
-            <Text style={[styles.greeting, { color: colors.textSecondary }]}>
-              Welcome back 👋
-            </Text>
-            <ThemedText style={styles.title}>Receipt Scanner</ThemedText>
+          <View style={styles.brandRow}>
+            <Image
+              source={require('@/assets/brand/symbol-orange.svg')}
+              style={styles.brandSymbol}
+              contentFit="contain"
+            />
+            <View>
+              <ThemedText style={styles.title}>Receipt Scanner</ThemedText>
+              <Text style={[styles.byStrativ, { color: colors.icon }]}>
+                BY STRATIV
+              </Text>
+            </View>
           </View>
           <TouchableOpacity
             style={[styles.scanButton, { backgroundColor: colors.tint }]}
@@ -99,13 +106,8 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <Animated.View entering={FadeIn.duration(300)} style={styles.statsGrid}>
-            {/* Hero: documents digitized */}
-            <LinearGradient
-              colors={['#6D5DF6', '#4F46E5', '#4338CA']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroCard}
-            >
+            {/* Hero: documents digitized — solid orange fill (brand rule: no gradients) */}
+            <View style={[styles.heroCard, { backgroundColor: colors.heroBg }]}>
               <View style={styles.heroTopRow}>
                 <Text style={[styles.heroLabel, { color: colors.heroTextMuted }]}>
                   Receipts Digitized
@@ -120,7 +122,7 @@ export default function DashboardScreen() {
               <Text style={[styles.heroSub, { color: colors.heroTextMuted }]}>
                 {formatCurrency(stats?.total_amount ?? 0)} total recorded value
               </Text>
-            </LinearGradient>
+            </View>
 
             {/* Stat tiles */}
             <View style={[styles.statTile, cardSurface, { width: cardWidth }]}>
@@ -255,15 +257,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
-  greeting: {
-    fontSize: 14,
-    marginBottom: 4,
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  brandSymbol: {
+    width: 36,
+    height: 36,
   },
   title: {
-    fontSize: 30,
-    lineHeight: 38,
-    fontFamily: Type.heavy,
-    letterSpacing: -0.5,
+    fontSize: 26,
+    lineHeight: 34,
+    fontFamily: Type.display,
+    letterSpacing: -0.3,
+  },
+  byStrativ: {
+    fontFamily: Type.regular,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    marginTop: 1,
   },
   scanButton: {
     width: 48,
@@ -271,9 +284,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#4F46E5',
+    shadowColor: '#101828',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 5,
   },
@@ -285,13 +298,13 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     width: '100%',
-    borderRadius: 24,
-    padding: 22,
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 5,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -372,7 +385,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 19,
-    fontFamily: Type.bold,
+    fontFamily: Type.display,
     letterSpacing: -0.3,
     marginBottom: 12,
   },

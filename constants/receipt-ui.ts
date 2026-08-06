@@ -23,11 +23,13 @@ export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
   unknown: 'Unknown',
 };
 
+// Category colors follow the Strativ data-viz palette; brand orange is
+// reserved for the accent, so categories never use it.
 const INVOICE_TYPE_COLOR_KEYS: Record<InvoiceType, keyof ThemeColors> = {
-  retail: 'success',
-  restaurant: 'accentOrange',
+  retail: 'accentTeal',
+  restaurant: 'accentYellow',
   utility: 'info',
-  service: 'accentPurple',
+  service: 'accentViolet',
   unknown: 'neutral',
 };
 
