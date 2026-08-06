@@ -238,29 +238,21 @@ export default function CaptureScreen() {
           <ThemedText style={styles.successTitle}>Receipt Processed!</ThemedText>
         </Animated.View>
 
-        <ScrollView style={styles.previewScroll}>
+        <ScrollView
+          style={styles.previewScroll}
+          contentContainerStyle={styles.previewContent}
+        >
           <ReceiptPreview receipt={processedReceipt} showImage={true} />
         </ScrollView>
 
-        <View style={styles.successActions}>
-          <TouchableOpacity
-            style={[styles.button, styles.outlineButton, { borderColor: colors.tint }]}
-            onPress={handleReset}
-          >
-            <IconSymbol name="camera.fill" size={20} color={colors.tint} />
-            <Text style={[styles.buttonText, { color: colors.tint }]}>
-              Scan Another
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, styles.outlineButton, { borderColor: colors.tint }]}
-            onPress={handleEditReceipt}
-          >
-            <IconSymbol name="pencil" size={20} color={colors.tint} />
-            <Text style={[styles.buttonText, { color: colors.tint }]}>Edit</Text>
-          </TouchableOpacity>
-
+        {/* Primary action full-width, secondary pair below — three buttons
+            in one row don't fit on phone widths */}
+        <View
+          style={[
+            styles.successActions,
+            { paddingBottom: insets.bottom + 96 },
+          ]}
+        >
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.tint }]}
             onPress={handleViewDetails}
@@ -268,6 +260,34 @@ export default function CaptureScreen() {
             <IconSymbol name="doc.text.fill" size={20} color="#fff" />
             <Text style={styles.buttonText}>View Details</Text>
           </TouchableOpacity>
+
+          <View style={styles.secondaryRow}>
+            <TouchableOpacity
+              style={[styles.button, styles.halfButton, styles.outlineButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+              onPress={handleReset}
+            >
+              <IconSymbol name="camera.fill" size={18} color={colors.tint} />
+              <Text
+                style={[styles.buttonText, styles.secondaryButtonText, { color: colors.text }]}
+                numberOfLines={1}
+              >
+                Scan Another
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, styles.halfButton, styles.outlineButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+              onPress={handleEditReceipt}
+            >
+              <IconSymbol name="pencil" size={18} color={colors.tint} />
+              <Text
+                style={[styles.buttonText, styles.secondaryButtonText, { color: colors.text }]}
+                numberOfLines={1}
+              >
+                Edit
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ReceiptEditModal
@@ -295,8 +315,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   errorTitle: {
-    fontSize: 24,
-    fontFamily: Type.bold,
+    fontSize: 22,
+    lineHeight: 28,
+    fontFamily: Type.display,
     marginTop: 16,
   },
   errorMessage: {
@@ -318,38 +339,49 @@ const styles = StyleSheet.create({
   },
   successTitle: {
     fontSize: 22,
-    fontFamily: Type.bold,
+    lineHeight: 28,
+    fontFamily: Type.display,
   },
   previewScroll: {
     flex: 1,
   },
+  previewContent: {
+    paddingBottom: 8,
+  },
   successActions: {
-    flexDirection: 'row',
     padding: 16,
-    gap: 12,
-    paddingBottom: 120,
+    gap: 10,
+  },
+  secondaryRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
   button: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    minHeight: 50,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 12,
     gap: 8,
+  },
+  halfButton: {
+    flex: 1,
   },
   secondaryButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
   },
   outlineButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
+    borderWidth: 1,
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: Type.semibold,
+  },
+  secondaryButtonText: {
+    flexShrink: 1,
   },
 });

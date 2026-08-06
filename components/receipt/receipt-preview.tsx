@@ -3,7 +3,7 @@
  * Display parsed receipt data with all details
  */
 
-import { StyleSheet, View, Text, ScrollView } from 'react-native';
+import { StyleSheet, View, Text } from 'react-native';
 import { Image } from 'expo-image';
 import { Receipt } from '@/types/receipt';
 import { Colors, ThemeColors, Type } from '@/constants/theme';
@@ -34,11 +34,10 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
   const hasError = !!receipt.error_message;
   const isLowConfidence = receipt.confidence_score < 0.5;
 
+  // Plain View — every consumer already wraps this in its own ScrollView,
+  // and nested same-direction ScrollViews break scrolling on Android.
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
-    >
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Image Preview */}
       {showImage && (
         <View style={styles.imageContainer}>
@@ -172,7 +171,7 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
           {Math.round(receipt.confidence_score * 100)}%
         </Text>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -184,9 +183,6 @@ function getConfidenceColor(score: number, colors: ThemeColors): string {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  contentContainer: {
     padding: 16,
     paddingBottom: 32,
   },
@@ -231,8 +227,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   merchantName: {
-    fontSize: 24,
-    fontFamily: Type.bold,
+    fontSize: 22,
+    lineHeight: 28,
+    fontFamily: Type.display,
     marginBottom: 4,
   },
   date: {
@@ -270,8 +267,9 @@ const styles = StyleSheet.create({
     fontFamily: Type.medium,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: Type.semibold,
+    fontSize: 17,
+    lineHeight: 24,
+    fontFamily: Type.display,
     marginBottom: 12,
   },
   itemsContainer: {
@@ -305,7 +303,8 @@ const styles = StyleSheet.create({
     fontFamily: Type.bold,
   },
   grandTotalValue: {
-    fontSize: 22,
+    fontSize: 20,
+    lineHeight: 26,
     fontFamily: Type.bold,
   },
   confidenceContainer: {
