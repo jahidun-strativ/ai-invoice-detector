@@ -16,6 +16,7 @@ import {
   parseReceiptWithRetry,
   validateImage,
 } from '@/services/ai-vision';
+import { isSheetConfigured, uploadReceiptToSheet } from '@/services/sheet';
 import { ProcessingState, Receipt, ReceiptInput } from '@/types/receipt';
 import { assessReceiptImage } from '@/utils/image-quality';
 import * as Haptics from 'expo-haptics';
@@ -47,6 +48,8 @@ export default function CaptureScreen() {
   // not a receipt) — renders "Process Anyway" instead of "Save Anyway"
   const [qualityRejected, setQualityRejected] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  // Google Sheet upload of the confirmed receipt (idle → uploading → sent)
+  const [sheetState, setSheetState] = useState<'idle' | 'uploading' | 'sent'>('idle');
 
   // Reset the success screen when the user leaves the tab, so returning
   // shows the camera instead of a stale "Receipt Processed!" screen.
@@ -65,6 +68,7 @@ export default function CaptureScreen() {
     setState('processing');
     setErrorMessage(null);
     setQualityRejected(false);
+    setSheetState('idle');
 
     try {
       // Extract structured data with the AI vision API
@@ -147,6 +151,7 @@ export default function CaptureScreen() {
     setProcessedReceipt(null);
     setErrorMessage(null);
     setQualityRejected(false);
+    setSheetState('idle');
   }, []);
 
   // View receipt details
@@ -172,10 +177,40 @@ export default function CaptureScreen() {
       );
       if (savedReceipt) {
         setProcessedReceipt(savedReceipt);
+        // Edited after a send: re-enable the button so the sheet row can be
+        // brought up to date (the Apps Script overwrites by receipt id)
+        setSheetState('idle');
       }
     },
     [processedReceipt, updateReceiptById]
   );
+
+  // Push the confirmed receipt to the configured Google Sheet
+  const handleSendToSheet = useCallback(async () => {
+    if (!processedReceipt) return;
+
+    if (!isSheetConfigured()) {
+      Alert.alert(
+        'No Sheet Connected',
+        'Set EXPO_PUBLIC_SHEET_WEBHOOK_URL to your Google Apps Script Web App URL. Setup steps are at the top of services/sheet.ts.'
+      );
+      return;
+    }
+
+    setSheetState('uploading');
+    try {
+      await uploadReceiptToSheet(processedReceipt);
+      setSheetState('sent');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setSheetState('idle');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        'Upload Failed',
+        error instanceof Error ? error.message : 'Could not reach the sheet'
+      );
+    }
+  }, [processedReceipt]);
 
   // Save with error - for cases where image couldn't be parsed
   const handleSaveWithError = useCallback(async () => {
@@ -305,11 +340,37 @@ export default function CaptureScreen() {
           ]}
         >
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.tint }]}
+            style={[
+              styles.button,
+              { backgroundColor: sheetState === 'sent' ? colors.success : colors.tint },
+            ]}
+            onPress={handleSendToSheet}
+            disabled={sheetState !== 'idle'}
+          >
+            <IconSymbol
+              name={sheetState === 'sent' ? 'checkmark.circle.fill' : 'tablecells'}
+              size={20}
+              color="#fff"
+            />
+            <Text style={styles.buttonText}>
+              {sheetState === 'uploading'
+                ? 'Uploading...'
+                : sheetState === 'sent'
+                  ? 'Added to Sheet'
+                  : 'Send to Sheet'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.outlineButton,
+              { borderColor: colors.border, backgroundColor: colors.card },
+            ]}
             onPress={handleViewDetails}
           >
-            <IconSymbol name="doc.text.fill" size={20} color="#fff" />
-            <Text style={styles.buttonText}>View Details</Text>
+            <IconSymbol name="doc.text.fill" size={20} color={colors.tint} />
+            <Text style={[styles.buttonText, { color: colors.text }]}>View Details</Text>
           </TouchableOpacity>
 
           <View style={styles.secondaryRow}>

@@ -62,6 +62,45 @@ eas env:list
 - **Important**: `EXPO_PUBLIC_*` values ship inside the client bundle and are extractable. Always use a **spend-capped** key.
 - Remove any legacy `EXPO_PUBLIC_GROQ_API_KEY` secrets from EAS — no longer used.
 
+## 3b) Google Sheet Upload
+
+`EXPO_PUBLIC_SHEET_WEBHOOK_URL` — the Apps Script Web App `/exec` URL that "Send to Sheet"
+POSTs to (read in `services/sheet.ts`, which also carries the `doPost` script to paste
+into the Sheet). Same lifecycle as the API key:
+
+```bash
+eas env:create --name EXPO_PUBLIC_SHEET_WEBHOOK_URL --scope project
+```
+
+- The Web App must be deployed with **Execute as: Me** / **Access: Anyone** — the app
+  posts without OAuth, so the unguessable URL *is* the credential.
+- **Rotation**: Deploy > Manage deployments > new version, or archive the deployment to
+  kill the old URL; update `.env` + the EAS env var and publish an OTA update.
+- Redeploying the script under the *same* deployment keeps the URL — edit `doPost` freely
+  without touching the app.
+
+## 3c) App Icon
+
+SVG sources live in `assets/brand/` — the PNGs in `assets/images/` are generated, never
+hand-edited:
+
+| Source | Generated | Used by |
+| --- | --- | --- |
+| `app-icon.svg` | `icon.png` (1024), `favicon.png` (48) | iOS / web |
+| `app-icon-foreground.svg` | `android-icon-foreground.png` (1024) | Android adaptive foreground (transparent; background is `adaptiveIcon.backgroundColor`) |
+| `app-icon-mono.svg` | `android-icon-monochrome.png` (1024) | Android 13+ themed icon (alpha silhouette) |
+| `symbol-orange.svg` | `splash-icon.png` (512×684) | Splash |
+
+```bash
+npx -y sharp-cli --input assets/brand/app-icon.svg --output assets/images/icon.png resize 1024 1024
+```
+
+- macOS `qlmanage` also renders SVG but **flattens transparency onto white** — it can only
+  produce `icon.png`/`favicon.png`, never the foreground/mono/splash layers.
+- The foreground mark is scaled to `0.86` so it survives any launcher mask (Android's safe
+  zone is the middle 66%). Keep that scale if you redraw it.
+- Icons are baked into the native binary — changing them needs a rebuild, not an OTA update.
+
 ## 4) Swapping the AI Model
 
 One constant in `services/ai-vision.ts`:
