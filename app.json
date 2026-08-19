@@ -8,6 +8,7 @@
     "scheme": "ai-invoice-extractor",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "platforms": ["android", "ios"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.jahidun13.aiinvoiceextractor",
