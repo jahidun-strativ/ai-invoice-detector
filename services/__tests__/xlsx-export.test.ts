@@ -12,7 +12,7 @@ import {
   formatReceiptRow,
   generateMonthlyXLSX,
 } from '../xlsx-export';
-import { ExportColumnConfig } from '../storage';
+import { ExportColumnConfig, setOfficeName } from '../storage';
 import { Receipt } from '@/types/receipt';
 
 let written: { path: string; data: string } | null = null;
@@ -332,5 +332,28 @@ describe('exportReceiptsAsSheet', () => {
 
   it('refuses an empty selection', async () => {
     await expect(exportReceiptsAsSheet([])).rejects.toThrow(/No receipts/);
+  });
+
+  // The detail screen's "Excel" button — the path that produced the broken CSV
+  it('gives one receipt the full house layout', async () => {
+    // Ad-hoc exports take the heading from Settings, not from a caller argument
+    await setOfficeName('Strativ Dhaka');
+
+    await exportReceiptsAsSheet([receipt({ merchant_name: 'ফেনী স্টেশনারী' })]);
+    const { sheet, values } = readCells();
+
+    expect(sheet.A1.v).toBe('STRATIV DHAKA');
+    expect(sheet.A2.v).toBe('Bill Approval Sheet');
+    expect(values).toEqual(
+      expect.arrayContaining([
+        'Date',
+        'ফেনী স্টেশনারী',
+        'Total Bill Amount',
+        'Prepared By',
+        'Signature:',
+      ])
+    );
+    // Its own month, not today's
+    expect(values).toEqual(expect.arrayContaining(['Month: August 2026']));
   });
 });
