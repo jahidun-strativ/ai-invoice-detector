@@ -172,15 +172,12 @@ export function CameraCapture({
     );
   }
 
-  // Camera view
+  // Camera view — overlays are siblings, not children of CameraView
   return (
     <View style={styles.container}>
-      <CameraView
-        ref={cameraRef}
-        style={styles.camera}
-        facing={facing}
-      >
-        {/* Top controls */}
+      <CameraView ref={cameraRef} style={styles.camera} facing={facing} />
+
+      <View style={styles.overlay} pointerEvents="box-none">
         <View style={[styles.topControls, { paddingTop: insets.top + 12 }]}>
           {onCancel && (
             <TouchableOpacity style={styles.topButton} onPress={onCancel}>
@@ -193,7 +190,6 @@ export function CameraCapture({
           </TouchableOpacity>
         </View>
 
-        {/* Scan guide overlay */}
         <View style={styles.scanGuide}>
           <View style={styles.scanCorner} />
           <View style={[styles.scanCorner, styles.scanCornerTopRight]} />
@@ -204,7 +200,6 @@ export function CameraCapture({
           </Text>
         </View>
 
-        {/* Bottom controls */}
         <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 110 }]}>
           <TouchableOpacity style={styles.galleryButton} onPress={pickImage}>
             <IconSymbol name="photo.on.rectangle" size={32} color="#fff" />
@@ -227,7 +222,7 @@ export function CameraCapture({
 
           <View style={styles.galleryButton} />
         </View>
-      </CameraView>
+      </View>
     </View>
   );
 }
@@ -237,7 +232,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   camera: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
   },
   permissionContainer: {
     flex: 1,

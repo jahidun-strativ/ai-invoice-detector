@@ -3,109 +3,107 @@
  * Camera/upload screen with receipt processing flow
  */
 
-import { CameraCapture } from '@/components/receipt/camera-capture';
-import { ReceiptEditModal } from '@/components/receipt/receipt-edit-modal';
-import { ReceiptPreview } from '@/components/receipt/receipt-preview';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Type } from '@/constants/theme';
-import { useReceipts } from '@/contexts/receipts-context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { CameraCapture } from "@/components/receipt/camera-capture";
+import { ReceiptEditModal } from "@/components/receipt/receipt-edit-modal";
+import { ReceiptPreview } from "@/components/receipt/receipt-preview";
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { Colors, Type } from "@/constants/theme";
+import { useReceipts } from "@/contexts/receipts-context";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { parseReceiptWithRetry, validateImage } from "@/services/ai-vision";
+import { ProcessingState, Receipt, ReceiptInput } from "@/types/receipt";
+import { assessReceiptImage } from "@/utils/image-quality";
+import * as Haptics from "expo-haptics";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import {
-  parseReceiptWithRetry,
-  validateImage,
-} from '@/services/ai-vision';
-import { isSheetConfigured, uploadReceiptToSheet } from '@/services/sheet';
-import { ProcessingState, Receipt, ReceiptInput } from '@/types/receipt';
-import { assessReceiptImage } from '@/utils/image-quality';
-import * as Haptics from 'expo-haptics';
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function CaptureScreen() {
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  const colors = Colors[colorScheme ?? "light"];
   const insets = useSafeAreaInsets();
 
   const { addReceipt, updateReceiptById } = useReceipts();
 
-  const [state, setState] = useState<ProcessingState>('idle');
+  const [state, setState] = useState<ProcessingState>("idle");
   const [capturedImageUri, setCapturedImageUri] = useState<string | null>(null);
-  const [processedReceipt, setProcessedReceipt] = useState<Receipt | null>(null);
+  const [processedReceipt, setProcessedReceipt] = useState<Receipt | null>(
+    null,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // True when the on-device pre-check rejected the photo (blurry / dark /
   // not a receipt) — renders "Process Anyway" instead of "Save Anyway"
   const [qualityRejected, setQualityRejected] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  // Google Sheet upload of the confirmed receipt (idle → uploading → sent)
-  const [sheetState, setSheetState] = useState<'idle' | 'uploading' | 'sent'>('idle');
 
   // Reset the success screen when the user leaves the tab, so returning
   // shows the camera instead of a stale "Receipt Processed!" screen.
   useFocusEffect(
     useCallback(() => {
       return () => {
-        setState((current) => (current === 'success' ? 'idle' : current));
+        setState((current) => (current === "success" ? "idle" : current));
         setShowEditModal(false);
       };
-    }, [])
+    }, []),
   );
 
   // Run the AI extraction on an image that already passed (or overrode)
   // the on-device pre-check
-  const processImage = useCallback(async (imageUri: string) => {
-    setState('processing');
-    setErrorMessage(null);
-    setQualityRejected(false);
-    setSheetState('idle');
+  const processImage = useCallback(
+    async (imageUri: string) => {
+      setState("processing");
+      setErrorMessage(null);
+      setQualityRejected(false);
 
-    try {
-      // Extract structured data with the AI vision API
-      const result = await parseReceiptWithRetry(imageUri);
+      try {
+        // Extract structured data with the AI vision API
+        const result = await parseReceiptWithRetry(imageUri);
 
-      // Create receipt input
-      const receiptInput: ReceiptInput = {
-        merchant_name: result.merchant_name,
-        receipt_date: result.receipt_date,
-        receipt_number: result.receipt_number,
-        invoice_type: result.invoice_type,
-        items: result.items,
-        subtotal: result.subtotal,
-        tax: result.tax,
-        total: result.total ?? 0,
-        currency: result.currency,
-        payment_method: result.payment_method,
-        confidence_score: result.confidence_score,
-        image_uri: imageUri,
-        raw_text: result.raw_text ?? null,
-        error_message: result.error_message ?? null,
-      };
+        // Create receipt input
+        const receiptInput: ReceiptInput = {
+          merchant_name: result.merchant_name,
+          receipt_date: result.receipt_date,
+          receipt_number: result.receipt_number,
+          invoice_type: result.invoice_type,
+          items: result.items,
+          subtotal: result.subtotal,
+          tax: result.tax,
+          total: result.total ?? 0,
+          currency: result.currency,
+          payment_method: result.payment_method,
+          confidence_score: result.confidence_score,
+          image_uri: imageUri,
+          raw_text: result.raw_text ?? null,
+          error_message: result.error_message ?? null,
+        };
 
-      // Save to database (context keeps dashboard/history in sync)
-      const savedReceipt = await addReceipt(receiptInput);
-      setProcessedReceipt(savedReceipt);
-      setState('success');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      console.error('Error processing receipt:', error);
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Failed to process receipt'
-      );
-      setState('error');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  }, [addReceipt]);
+        // Save to database (context keeps dashboard/history in sync)
+        const savedReceipt = await addReceipt(receiptInput);
+        setProcessedReceipt(savedReceipt);
+        setState("success");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (error) {
+        console.error("Error processing receipt:", error);
+        setErrorMessage(
+          error instanceof Error ? error.message : "Failed to process receipt",
+        );
+        setState("error");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    },
+    [addReceipt],
+  );
 
   // Handle image capture: cheap on-device checks first, so obviously bad
   // photos never reach the AI (no wasted API calls)
@@ -113,15 +111,15 @@ export default function CaptureScreen() {
     async (imageUri: string) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setCapturedImageUri(imageUri);
-      setState('processing');
+      setState("processing");
       setErrorMessage(null);
       setQualityRejected(false);
 
       // Hard constraints (file exists, size/resolution limits)
       const validation = await validateImage(imageUri);
       if (!validation.valid) {
-        setErrorMessage(validation.error || 'Invalid image');
-        setState('error');
+        setErrorMessage(validation.error || "Invalid image");
+        setState("error");
         return;
       }
 
@@ -131,7 +129,7 @@ export default function CaptureScreen() {
         if (!quality.ok) {
           setErrorMessage(quality.reason);
           setQualityRejected(true);
-          setState('error');
+          setState("error");
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           return;
         }
@@ -141,17 +139,16 @@ export default function CaptureScreen() {
 
       await processImage(imageUri);
     },
-    [processImage]
+    [processImage],
   );
 
   // Reset to capture new receipt
   const handleReset = useCallback(() => {
-    setState('idle');
+    setState("idle");
     setCapturedImageUri(null);
     setProcessedReceipt(null);
     setErrorMessage(null);
     setQualityRejected(false);
-    setSheetState('idle');
   }, []);
 
   // View receipt details
@@ -173,44 +170,14 @@ export default function CaptureScreen() {
 
       const savedReceipt = await updateReceiptById(
         processedReceipt.id,
-        updatedReceipt
+        updatedReceipt,
       );
       if (savedReceipt) {
         setProcessedReceipt(savedReceipt);
-        // Edited after a send: re-enable the button so the sheet row can be
-        // brought up to date (the Apps Script overwrites by receipt id)
-        setSheetState('idle');
       }
     },
-    [processedReceipt, updateReceiptById]
+    [processedReceipt, updateReceiptById],
   );
-
-  // Push the confirmed receipt to the configured Google Sheet
-  const handleSendToSheet = useCallback(async () => {
-    if (!processedReceipt) return;
-
-    if (!isSheetConfigured()) {
-      Alert.alert(
-        'No Sheet Connected',
-        'Set EXPO_PUBLIC_SHEET_WEBHOOK_URL to your Google Apps Script Web App URL. Setup steps are at the top of services/sheet.ts.'
-      );
-      return;
-    }
-
-    setSheetState('uploading');
-    try {
-      await uploadReceiptToSheet(processedReceipt);
-      setSheetState('sent');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      setSheetState('idle');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(
-        'Upload Failed',
-        error instanceof Error ? error.message : 'Could not reach the sheet'
-      );
-    }
-  }, [processedReceipt]);
 
   // Save with error - for cases where image couldn't be parsed
   const handleSaveWithError = useCallback(async () => {
@@ -221,44 +188,44 @@ export default function CaptureScreen() {
         merchant_name: null,
         receipt_date: null,
         receipt_number: null,
-        invoice_type: 'unknown',
+        invoice_type: "unknown",
         items: [],
         subtotal: null,
         tax: null,
         total: 0,
-        currency: 'BDT',
+        currency: "BDT",
         payment_method: null,
         confidence_score: 0,
         image_uri: capturedImageUri,
         raw_text: null,
-        error_message: errorMessage || 'Failed to process receipt',
+        error_message: errorMessage || "Failed to process receipt",
       };
 
       const savedReceipt = await addReceipt(receiptInput);
       setProcessedReceipt(savedReceipt);
-      setState('success');
+      setState("success");
 
       Alert.alert(
-        'Receipt Saved',
-        'The receipt image has been saved. You can edit the details manually later.',
-        [{ text: 'OK' }]
+        "Receipt Saved",
+        "The receipt image has been saved. You can edit the details manually later.",
+        [{ text: "OK" }],
       );
     } catch {
-      Alert.alert('Error', 'Failed to save receipt');
+      Alert.alert("Error", "Failed to save receipt");
     }
   }, [capturedImageUri, errorMessage, addReceipt]);
 
   // Render based on state
-  if (state === 'idle' || state === 'capturing' || state === 'processing') {
+  if (state === "idle" || state === "capturing" || state === "processing") {
     return (
       <CameraCapture
         onCapture={handleCapture}
-        isProcessing={state === 'processing'}
+        isProcessing={state === "processing"}
       />
     );
   }
 
-  if (state === 'error') {
+  if (state === "error") {
     return (
       <ThemedView style={styles.container}>
         <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
@@ -268,10 +235,10 @@ export default function CaptureScreen() {
             color={qualityRejected ? colors.warning : colors.danger}
           />
           <ThemedText style={styles.errorTitle}>
-            {qualityRejected ? 'Check the Photo' : 'Processing Failed'}
+            {qualityRejected ? "Check the Photo" : "Processing Failed"}
           </ThemedText>
           <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
-            {errorMessage || 'Unable to process the receipt image'}
+            {errorMessage || "Unable to process the receipt image"}
           </Text>
 
           <View style={styles.errorActions}>
@@ -281,27 +248,43 @@ export default function CaptureScreen() {
             >
               <IconSymbol name="camera.fill" size={20} color="#fff" />
               <Text style={styles.buttonText}>
-                {qualityRejected ? 'Retake Photo' : 'Try Again'}
+                {qualityRejected ? "Retake Photo" : "Try Again"}
               </Text>
             </TouchableOpacity>
 
             {qualityRejected && capturedImageUri ? (
               // The detector isn't perfect — let the user override it
               <TouchableOpacity
-                style={[styles.button, styles.secondaryButton, { borderColor: colors.border }]}
+                style={[
+                  styles.button,
+                  styles.secondaryButton,
+                  { borderColor: colors.border },
+                ]}
                 onPress={() => processImage(capturedImageUri)}
               >
-                <IconSymbol name="doc.text.fill" size={20} color={colors.tint} />
+                <IconSymbol
+                  name="doc.text.fill"
+                  size={20}
+                  color={colors.tint}
+                />
                 <Text style={[styles.buttonText, { color: colors.tint }]}>
                   Process Anyway
                 </Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={[styles.button, styles.secondaryButton, { borderColor: colors.border }]}
+                style={[
+                  styles.button,
+                  styles.secondaryButton,
+                  { borderColor: colors.border },
+                ]}
                 onPress={handleSaveWithError}
               >
-                <IconSymbol name="square.and.arrow.down" size={20} color={colors.tint} />
+                <IconSymbol
+                  name="square.and.arrow.down"
+                  size={20}
+                  color={colors.tint}
+                />
                 <Text style={[styles.buttonText, { color: colors.tint }]}>
                   Save Anyway
                 </Text>
@@ -313,15 +296,21 @@ export default function CaptureScreen() {
     );
   }
 
-  if (state === 'success' && processedReceipt) {
+  if (state === "success" && processedReceipt) {
     return (
       <ThemedView style={styles.container}>
         <Animated.View
           entering={FadeInDown.duration(400)}
           style={[styles.successHeader, { paddingTop: insets.top + 12 }]}
         >
-          <IconSymbol name="checkmark.circle.fill" size={32} color={colors.success} />
-          <ThemedText style={styles.successTitle}>Receipt Processed!</ThemedText>
+          <IconSymbol
+            name="checkmark.circle.fill"
+            size={32}
+            color={colors.success}
+          />
+          <ThemedText style={styles.successTitle}>
+            Receipt Processed!
+          </ThemedText>
         </Animated.View>
 
         <ScrollView
@@ -331,36 +320,10 @@ export default function CaptureScreen() {
           <ReceiptPreview receipt={processedReceipt} showImage={true} />
         </ScrollView>
 
-        {/* Primary action full-width, secondary pair below — three buttons
-            in one row don't fit on phone widths */}
+        {/* Action buttons */}
         <View
-          style={[
-            styles.successActions,
-            { paddingBottom: insets.bottom + 96 },
-          ]}
+          style={[styles.successActions, { paddingBottom: insets.bottom + 96 }]}
         >
-          <TouchableOpacity
-            style={[
-              styles.button,
-              { backgroundColor: sheetState === 'sent' ? colors.success : colors.tint },
-            ]}
-            onPress={handleSendToSheet}
-            disabled={sheetState !== 'idle'}
-          >
-            <IconSymbol
-              name={sheetState === 'sent' ? 'checkmark.circle.fill' : 'tablecells'}
-              size={20}
-              color="#fff"
-            />
-            <Text style={styles.buttonText}>
-              {sheetState === 'uploading'
-                ? 'Uploading...'
-                : sheetState === 'sent'
-                  ? 'Added to Sheet'
-                  : 'Send to Sheet'}
-            </Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={[
               styles.button,
@@ -370,17 +333,28 @@ export default function CaptureScreen() {
             onPress={handleViewDetails}
           >
             <IconSymbol name="doc.text.fill" size={20} color={colors.tint} />
-            <Text style={[styles.buttonText, { color: colors.text }]}>View Details</Text>
+            <Text style={[styles.buttonText, { color: colors.text }]}>
+              View Details
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.secondaryRow}>
             <TouchableOpacity
-              style={[styles.button, styles.halfButton, styles.outlineButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+              style={[
+                styles.button,
+                styles.halfButton,
+                styles.outlineButton,
+                { borderColor: colors.border, backgroundColor: colors.card },
+              ]}
               onPress={handleReset}
             >
               <IconSymbol name="camera.fill" size={18} color={colors.tint} />
               <Text
-                style={[styles.buttonText, styles.secondaryButtonText, { color: colors.text }]}
+                style={[
+                  styles.buttonText,
+                  styles.secondaryButtonText,
+                  { color: colors.text },
+                ]}
                 numberOfLines={1}
               >
                 Scan Another
@@ -388,12 +362,21 @@ export default function CaptureScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.button, styles.halfButton, styles.outlineButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+              style={[
+                styles.button,
+                styles.halfButton,
+                styles.outlineButton,
+                { borderColor: colors.border, backgroundColor: colors.card },
+              ]}
               onPress={handleEditReceipt}
             >
               <IconSymbol name="pencil" size={18} color={colors.tint} />
               <Text
-                style={[styles.buttonText, styles.secondaryButtonText, { color: colors.text }]}
+                style={[
+                  styles.buttonText,
+                  styles.secondaryButtonText,
+                  { color: colors.text },
+                ]}
                 numberOfLines={1}
               >
                 Edit
@@ -421,8 +404,8 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 32,
     gap: 16,
   },
@@ -434,18 +417,18 @@ const styles = StyleSheet.create({
   },
   errorMessage: {
     fontSize: 16,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 24,
   },
   errorActions: {
     marginTop: 32,
     gap: 12,
-    width: '100%',
+    width: "100%",
   },
   successHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingBottom: 16,
     gap: 12,
   },
@@ -465,13 +448,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   secondaryRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
   },
   button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     minHeight: 50,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -482,14 +465,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   secondaryButton: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     borderWidth: 1,
   },
   outlineButton: {
     borderWidth: 1,
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 15,
     fontFamily: Type.semibold,
   },

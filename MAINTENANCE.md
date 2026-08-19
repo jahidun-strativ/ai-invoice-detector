@@ -62,22 +62,73 @@ eas env:list
 - **Important**: `EXPO_PUBLIC_*` values ship inside the client bundle and are extractable. Always use a **spend-capped** key.
 - Remove any legacy `EXPO_PUBLIC_GROQ_API_KEY` secrets from EAS — no longer used.
 
-## 3b) Google Sheet Upload
+## 3b) Monthly Export (replaces the old Google Sheet upload)
 
-`EXPO_PUBLIC_SHEET_WEBHOOK_URL` — the Apps Script Web App `/exec` URL that "Send to Sheet"
-POSTs to (read in `services/sheet.ts`, which also carries the `doPost` script to paste
-into the Sheet). Same lifecycle as the API key:
+The Google Sheets integration is **gone** — writing to an org sheet needed OAuth the app
+never had. `services/sheet.ts` and `EXPO_PUBLIC_SHEET_WEBHOOK_URL` are deleted; remove
+that env var from EAS if it was ever created:
 
 ```bash
-eas env:create --name EXPO_PUBLIC_SHEET_WEBHOOK_URL --scope project
+eas env:delete --name EXPO_PUBLIC_SHEET_WEBHOOK_URL
 ```
 
-- The Web App must be deployed with **Execute as: Me** / **Access: Anyone** — the app
-  posts without OAuth, so the unguessable URL *is* the credential.
-- **Rotation**: Deploy > Manage deployments > new version, or archive the deployment to
-  kill the old URL; update `.env` + the EAS env var and publish an OTA update.
-- Redeploying the script under the *same* deployment keeps the URL — edit `doPost` freely
-  without touching the app.
+The workflow is now local-first and monthly:
+
+1. Staff scan receipts through the month — everything lands in SQLite, no network needed.
+2. **Export** tab lists each month with a receipt count and total.
+3. Export asks for the four signatories and the cash drawn from the account, then writes
+   an XLSX "Bill Approval Sheet" to `documentDirectory/exports/` and opens the share sheet.
+
+- Office name (the sheet's heading) and the sheet's columns are set in **Settings**; both
+  live in the SQLite `config` / `export_columns` tables, not in env vars.
+- Sheet layout, styling and the summary maths are in `services/xlsx-export.ts`, covered by
+  `services/__tests__/xlsx-export.test.ts` (generates a workbook and reads it back).
+- Styling requires **`xlsx-js-style`**, not `xlsx` — the community SheetJS build silently
+  drops cell styles on write, which would lose every border and bold heading.
+- **Optional remote database**: Settings → Advanced. Two kinds, detected from the URL:
+  - **Supabase** (`https://<ref>.supabase.co`) — rows are upserted on `id` into the
+    `receipts` table over PostgREST, so re-syncing never duplicates. The table DDL and the
+    write-only RLS policies are in the header of `services/remote-db.ts` — run them once in
+    the SQL editor. No `@supabase/supabase-js` dependency: it bundles realtime/auth/storage
+    for what is one POST with two headers.
+  - Any other `https://` endpoint — receives `{type:'receipt', receipt}` POSTs. Only
+    reachable via the `database_url` config row (no UI); the env var is the supported path.
+  - Raw `postgresql://` / `mysql://` strings are rejected: a phone has no TCP socket, so
+    those need an API in front.
+- **The endpoint is build config, not a setting.** There is no database field in Settings —
+  staff have no reason to see a URL, and every field is another way to break sync. Set:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon key>
+
+eas env:create --name EXPO_PUBLIC_SUPABASE_URL --scope project
+eas env:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY --scope project
+```
+
+  Changing the project = change the env var and ship a build or OTA update; every phone
+  follows. **Nothing about the database appears in the app UI at all** — no URL, no status,
+  no sync button. If a Supabase URL ships without its anon key, sync is skipped with a
+  console warning rather than 401-ing on every scan.
+- **Offline scans handle themselves.** `receipts.synced_at` is null until the endpoint
+  accepts the row, so a scan taken with no signal is retried automatically on the next app
+  start (`syncPendingReceipts()`, capped at 500 per launch). Only ids the endpoint actually
+  accepted are marked, so a partial batch failure simply retries.
+- **Diagnosing "rows aren't arriving"**: there is no in-app indicator by design. Check the
+  device log for `receipt(s) still waiting to reach the database`, or query the table with
+  the service key and compare counts against the app's month totals.
+- **Sync is push-only, on purpose.** The app cannot read the table (no `select` policy), so
+  it can never tell "the table is empty" apart from "I am not allowed to look" or "the
+  request failed". Deleting local rows to match an apparently-empty table would therefore
+  wipe good data — including scans that had not uploaded yet. Local is always the source of
+  truth; agreement is restored by pushing.
+- **After truncating the table**: Settings → DATA → **Re-upload all receipts** clears
+  `synced_at` on every row and pushes them again (batches of 500, up to 10k). Safe to run
+  any time — the upsert is keyed on receipt id, so re-running against a full table is a
+  no-op.
+- **The anon key ships in the app** like any client credential. It is safe *only* because
+  the RLS policies grant insert/update and no select — it cannot read the table back. Never
+  paste the service key into the app.
 
 ## 3c) App Icon
 

@@ -31,6 +31,7 @@ const MAPPING = {
   'arrow.triangle.2.circlepath': 'flip-camera-ios',
   'arrow.up.left.and.arrow.down.right': 'fullscreen',
   'arrow.down.circle': 'arrow-circle-down',
+  'arrow.up.circle': 'arrow-circle-up',
   'checkmark': 'check',
   'checkmark.circle': 'check-circle-outline',
   'checkmark.circle.fill': 'check-circle',

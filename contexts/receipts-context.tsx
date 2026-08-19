@@ -17,14 +17,22 @@ import {
 } from 'react';
 import {
   createReceipt,
+  deleteAllReceipts,
   deleteReceipt,
   getReceipts,
   getReceiptStats,
   getRecentReceipts,
   initDatabase,
+  markReceiptsSynced,
   searchReceipts,
   updateReceipt,
 } from '@/services/storage';
+import {
+  isRemoteConfigured,
+  refreshRemoteConfig,
+  syncReceipt,
+} from '@/services/remote-db';
+import { syncPendingReceipts } from '@/services/config';
 import {
   InvoiceType,
   Receipt,
@@ -96,6 +104,8 @@ interface ReceiptsContextValue extends ReceiptsState {
   addReceipt: (input: ReceiptInput) => Promise<Receipt>;
   updateReceiptById: (id: string, input: ReceiptInput) => Promise<Receipt | null>;
   removeReceipt: (id: string) => Promise<void>;
+  /** Wipe every receipt on this device. Caller must confirm first. */
+  clearAllReceipts: () => Promise<number>;
 }
 
 const ReceiptsContext = createContext<ReceiptsContextValue | null>(null);
@@ -146,6 +156,16 @@ export function ReceiptsProvider({ children }: { children: ReactNode }) {
     async (input: ReceiptInput) => {
       const saved = await createReceipt(input);
       refresh();
+      // Req 2.9/2.10: mirror to the configured endpoint, but never let a
+      // network failure surface as a failed scan — the local row is the record.
+      // A failure leaves synced_at null, so the next launch retries it.
+      if (isRemoteConfigured()) {
+        syncReceipt(saved)
+          .then(() => markReceiptsSynced([saved.id]))
+          .catch((error) => {
+            console.warn('Remote sync failed; receipt is saved locally:', error);
+          });
+      }
       return saved;
     },
     [refresh],
@@ -168,13 +188,26 @@ export function ReceiptsProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const clearAllReceipts = useCallback(async () => {
+    const deleted = await deleteAllReceipts();
+    await refresh();
+    return deleted;
+  }, [refresh]);
+
   // Single DB init for the whole app.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         await initDatabase();
+        await refreshRemoteConfig();
         if (!cancelled) await refresh();
+
+        // Catch up anything scanned without signal. Fire-and-forget: the app
+        // is fully usable whether or not the database is reachable.
+        syncPendingReceipts().catch((error) => {
+          console.warn('Pending sync failed; will retry next launch:', error);
+        });
       } catch (error) {
         if (!cancelled) {
           dispatch({
@@ -198,8 +231,17 @@ export function ReceiptsProvider({ children }: { children: ReactNode }) {
       addReceipt,
       updateReceiptById,
       removeReceipt,
+      clearAllReceipts,
     }),
-    [state, refresh, setFilter, addReceipt, updateReceiptById, removeReceipt],
+    [
+      state,
+      refresh,
+      setFilter,
+      addReceipt,
+      updateReceiptById,
+      removeReceipt,
+      clearAllReceipts,
+    ],
   );
 
   return <ReceiptsContext.Provider value={value}>{children}</ReceiptsContext.Provider>;

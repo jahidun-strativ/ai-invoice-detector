@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-AI Receipt Scanner — an Expo SDK 54 / React Native app that photographs receipts, extracts structured data with Google Gemini 2.5 Flash via OpenRouter, stores it in local SQLite, and exports JSON/CSV. Tuned for English + Bengali/Bangla receipts including handwriting. Uses pnpm. No test suite exists.
+AI Receipt Scanner — an Expo SDK 54 / React Native app that photographs receipts, extracts structured data with Google Gemini 2.5 Flash via OpenRouter, stores it in local SQLite, and exports a monthly XLSX "Bill Approval Sheet" (plus ad-hoc JSON/CSV). Tuned for English + Bengali/Bangla receipts including handwriting. Uses pnpm. Tests: `pnpm test` (jest-expo; `expo-sqlite` is mocked onto `node:sqlite` so storage tests run real SQL).
+
+The office workflow is monthly and local-first: staff scan receipts all month with no network dependency, then export one signed-off sheet per month. There is deliberately **no Google Sheets integration** — writing to an org sheet needs OAuth the app never had; see `.kiro/specs/monthly-receipt-export/`.
 
 Detailed architecture lives in `APP_DOC.md`; operational tasks (releases, OTA, key rotation) in `MAINTENANCE.md`; Expo-specific agent guidance (doc links, EAS workflows) in `AGENTS.md`.
 
@@ -31,8 +33,12 @@ Core data flow: **capture → validate → on-device quality gate → OpenRouter
 - `services/ai-vision.ts` — the AI layer. Exports only `validateImage` and `parseReceiptWithRetry`. OpenRouter chat completions (model in the single `MODEL_ID` constant), JSON mode, base64 image, prompt tuned for Bangla handwriting with numeral conversion. Retry with backoff and best-result tracking; 401/402 abort immediately. Normalizes everything (dates → ISO, invalid types → `'unknown'`, confidence recalibrated); returns a safe error object instead of throwing.
 - `services/storage.ts` — SQLite CRUD + stats; `items` stored as JSON text; includes stale-connection retry for Android `execAsync` NPEs. Schema uses `CREATE TABLE IF NOT EXISTS` — column changes need guarded `ALTER TABLE` (see MAINTENANCE.md).
 - `services/export.ts` — JSON/CSV export + share.
+- `services/xlsx-export.ts` — the monthly Bill Approval Sheet: merged office-name heading, dynamic columns from config, numeric money cells (`#,##0.00`, so Excel can total them), summary block (total / received / excess-less), four signature blocks. Must use **`xlsx-js-style`**, never plain `xlsx` — the community SheetJS build silently discards cell styles on write.
+- `services/config.ts` — office name, export columns, optional remote endpoint; validation over the SQLite `config` / `export_columns` tables in `storage.ts`.
+- `services/remote-db.ts` — optional remote mirror of each receipt, fire-and-forget: a sync failure must never surface as a failed scan. The endpoint is **build config** (`EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`) and the database is deliberately invisible in the UI — no field, no status, no sync button. Offline scans are caught up automatically on app start via `syncPendingReceipts()`, driven by the `receipts.synced_at` column (null = still pending); only ids the endpoint accepted get marked. Supabase goes over PostgREST (upsert on `id`; table DDL + write-only RLS policies are in the file header) with plain `fetch` — do **not** add `@supabase/supabase-js` for this. Raw `postgresql://`/`mysql://` URLs are rejected (no TCP socket on a phone). SQLite remains the source of truth; the remote is a mirror, never a read path. **Sync is push-only and must stay that way**: with no `select` policy the app cannot distinguish an empty table from a blocked or failed read, so deleting local rows to match the remote would destroy data — including scans not yet uploaded. Agreement after a truncate is restored by `reuploadAllReceipts()` (Settings → DATA), which clears `synced_at` and pushes again.
+- `contexts/export-context.tsx` — export screen state only (periods, selected month, generating, share). Deliberately separate from `receipts-context`.
 - `types/receipt.ts` — `Receipt`, `ReceiptInput`, `AIReceiptResponse` (API result; `total` nullable there, non-null in `Receipt`), filters, stats.
-- `app/` — Expo Router tabs: dashboard (`index`), `capture` (state machine; success resets on tab blur), `history` (debounced search + filter chips), `settings` (OTA updates via `components/update-status.tsx`, app info). Detail: `receipt/[id].tsx`.
+- `app/` — Expo Router tabs: dashboard (`index`, with the current-month card), `capture` (state machine; success resets on tab blur), `history` (debounced search + filter chips), `export` (month cards → `components/receipt/export-config-modal.tsx`), `settings` (office name, sheet columns, remote endpoint, OTA updates via `components/update-status.tsx`). Detail: `receipt/[id].tsx`.
 
 ## Conventions
 

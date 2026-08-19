@@ -13,7 +13,9 @@
       "bundleIdentifier": "com.jahidun13.aiinvoiceextractor",
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs camera access to capture receipt images for data extraction.",
-        "NSPhotoLibraryUsageDescription": "This app needs photo library access to import receipt images for data extraction."
+        "NSPhotoLibraryUsageDescription": "This app needs photo library access to import receipt images for data extraction.",
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true
       }
     },
     "android": {
@@ -69,7 +71,9 @@
           "savePhotosPermission": "Allow $(PRODUCT_NAME) to save exported files to your photos."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

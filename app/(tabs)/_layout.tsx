@@ -89,6 +89,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="export"
+        options={{
+          title: 'Export',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="tablecells" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',

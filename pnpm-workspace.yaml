@@ -1,2 +1,10 @@
+# pnpm 11 dropped the "pnpm" field in package.json and replaced
+# onlyBuiltDependencies with allowBuilds. It also defaults strictDepBuilds to
+# true, so an unreviewed build script fails `pnpm install --frozen-lockfile`
+# outright — which is what broke the EAS builds.
+#
+# unrs-resolver is a lint-only transitive dep
+# (eslint-config-expo -> eslint-import-resolver-typescript); it ships prebuilt
+# napi binaries per platform and is not part of the app bundle.
 allowBuilds:
   unrs-resolver: true

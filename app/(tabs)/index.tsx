@@ -26,6 +26,7 @@ import { INVOICE_TYPE_ICONS, INVOICE_TYPE_LABELS } from '@/constants/receipt-ui'
 import { Colors, Type } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getCurrentMonthlyPeriod } from '@/services/storage';
 import { InvoiceType } from '@/types/receipt';
 import { formatCurrency } from '@/utils/format';
 
@@ -161,6 +162,41 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </Animated.View>
         )}
+
+        {/* This month's batch — the unit the office actually processes */}
+        <View style={styles.section}>
+          <View style={[styles.monthCard, cardSurface]}>
+            <View style={styles.monthTop}>
+              <View style={styles.monthInfo}>
+                <Text style={[styles.monthLabel, { color: colors.textSecondary }]}>
+                  CURRENT MONTH
+                </Text>
+                <ThemedText style={styles.monthPeriod}>
+                  {getCurrentMonthlyPeriod().label}
+                </ThemedText>
+              </View>
+              <View style={[styles.monthBadge, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.monthBadgeText, { color: colors.text }]}>
+                  {stats?.this_month_count ?? 0}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={[styles.monthAmount, { color: colors.text }]}>
+              {formatCurrency(stats?.this_month_amount ?? 0)}
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.monthButton, { borderColor: colors.border }]}
+              onPress={() => router.push('/(tabs)/export')}
+            >
+              <IconSymbol name="tablecells" size={18} color={colors.tint} />
+              <Text style={[styles.monthButtonText, { color: colors.text }]}>
+                Export this month
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Category Breakdown */}
         {stats && stats.total_count > 0 && (
@@ -372,6 +408,59 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 13,
     marginTop: 2,
+  },
+  monthCard: {
+    borderRadius: 20,
+    padding: 16,
+    gap: 12,
+  },
+  monthTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  monthInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  monthLabel: {
+    fontSize: 11,
+    fontFamily: Type.semibold,
+    letterSpacing: 0.5,
+  },
+  monthPeriod: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontFamily: Type.display,
+  },
+  monthBadge: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  monthBadgeText: {
+    fontSize: 15,
+    fontFamily: Type.semibold,
+  },
+  monthAmount: {
+    fontSize: 24,
+    fontFamily: Type.display,
+  },
+  monthButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+  },
+  monthButtonText: {
+    fontSize: 15,
+    fontFamily: Type.semibold,
   },
   section: {
     marginTop: 24,
