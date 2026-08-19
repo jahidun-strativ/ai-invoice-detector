@@ -11,7 +11,8 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Type } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { exportAndShare } from '@/services/export';
+import { exportAndShareJson, shareFile } from '@/services/export';
+import { exportReceiptsAsSheet } from '@/services/xlsx-export';
 import { getReceiptById } from '@/services/storage';
 import { Receipt, ReceiptInput } from '@/types/receipt';
 import * as Haptics from 'expo-haptics';
@@ -86,25 +87,32 @@ export default function ReceiptDetailScreen() {
   }, [id]);
 
   // Handle export
-  const handleExport = useCallback((format: 'json' | 'csv') => {
+  // Excel is the document the office reads; JSON is a raw dump for debugging
+  const handleExportSheet = useCallback(async () => {
     if (!receipt) return;
+    try {
+      setIsExporting(true);
+      await shareFile(await exportReceiptsAsSheet([receipt]));
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'Failed to export receipt'
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [receipt]);
 
-    Alert.alert(`Export as ${format.toUpperCase()}`, 'Share the exported file?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Export & Share',
-        onPress: async () => {
-          try {
-            setIsExporting(true);
-            await exportAndShare([receipt], format);
-          } catch {
-            Alert.alert('Error', 'Failed to export receipt');
-          } finally {
-            setIsExporting(false);
-          }
-        },
-      },
-    ]);
+  const handleExportJson = useCallback(async () => {
+    if (!receipt) return;
+    try {
+      setIsExporting(true);
+      await exportAndShareJson([receipt]);
+    } catch {
+      Alert.alert('Error', 'Failed to export receipt');
+    } finally {
+      setIsExporting(false);
+    }
   }, [receipt]);
 
   // Handle delete
@@ -310,7 +318,7 @@ export default function ReceiptDetailScreen() {
               style={[styles.modalActionButton, { backgroundColor: colors.success }]}
               onPress={() => {
                 setShowJsonPreview(false);
-                handleExport('json');
+                handleExportJson();
               }}
             >
               <IconSymbol name="square.and.arrow.up" size={20} color="#fff" />
@@ -329,7 +337,7 @@ export default function ReceiptDetailScreen() {
       >
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: colors.success }]}
-          onPress={() => handleExport('json')}
+          onPress={handleExportJson}
           disabled={isExporting}
         >
           {isExporting ? (
@@ -344,7 +352,7 @@ export default function ReceiptDetailScreen() {
 
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: colors.info }]}
-          onPress={() => handleExport('csv')}
+          onPress={handleExportSheet}
           disabled={isExporting}
         >
           {isExporting ? (
@@ -352,7 +360,7 @@ export default function ReceiptDetailScreen() {
           ) : (
             <>
               <IconSymbol name="tablecells" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>CSV</Text>
+              <Text style={styles.actionButtonText}>Excel</Text>
             </>
           )}
         </TouchableOpacity>

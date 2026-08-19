@@ -6,7 +6,9 @@
 
 import XLSX from 'xlsx-js-style';
 import {
+  buildBillApprovalSheet,
   calculateSummary,
+  exportReceiptsAsSheet,
   formatReceiptRow,
   generateMonthlyXLSX,
 } from '../xlsx-export';
@@ -65,7 +67,8 @@ const SIGNATURES = {
 /** Flatten the generated sheet to the list of its cell values */
 function readCells(): { values: any[]; sheet: any } {
   expect(written).not.toBeNull();
-  const wb = XLSX.read(written!.data, { type: 'base64' });
+  // cellStyles: the reader discards fills and borders without it
+  const wb = XLSX.read(written!.data, { type: 'base64', cellStyles: true });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const values = Object.keys(sheet)
     .filter((k) => !k.startsWith('!'))
@@ -175,19 +178,159 @@ describe('generateMonthlyXLSX', () => {
     expect(values).toContain(50); // excess
   });
 
-  it('prints filled signatories and a blank line for the rest', async () => {
+  it('prints filled signatories and leaves the rest to sign by hand', async () => {
     await generateMonthlyXLSX(config, SIGNATURES);
     const { values } = readCells();
+
     expect(values).toEqual(
-      expect.arrayContaining(['Prepared By', 'Approved By', 'Name: Rahim'])
+      expect.arrayContaining([
+        'Prepared By',
+        'Approved By',
+        'Name: Rahim',
+        'Designation: Accounts Officer',
+      ])
     );
-    expect(values.some((v) => typeof v === 'string' && v.startsWith('Name: ____'))).toBe(
-      true
-    );
+    // Unfilled roles get a bare label; the bordered cell is the writing space,
+    // since underscore runs overflowed a narrow block and were clipped
+    expect(values).toEqual(expect.arrayContaining(['Name:', 'Signature:']));
+    expect(values.some((v) => typeof v === 'string' && v.includes('____'))).toBe(false);
+  });
+
+  it('leaves out the filter arrows that viewers warn about', async () => {
+    await generateMonthlyXLSX(config, SIGNATURES);
+    const { sheet } = readCells();
+    expect(sheet['!autofilter']).toBeUndefined();
   });
 
   it('names the file after the office and month', async () => {
     await generateMonthlyXLSX(config, SIGNATURES);
     expect(written!.path).toContain('Strativ_Dhaka_Bill_Approval_August_2026.xlsx');
+  });
+
+  // The CSV export mangled Bangla into "à¦«à§à¦¨à§" because a spreadsheet
+  // opening a CSV guesses the code page. XLSX carries UTF-8 inside the file.
+  it('round-trips a Bangla merchant name intact', async () => {
+    const bangla = 'ফেনী স্টেশনারী';
+    await generateMonthlyXLSX(
+      { ...config, receipts: [receipt({ merchant_name: bangla })] },
+      SIGNATURES
+    );
+
+    const { values } = readCells();
+    expect(values).toContain(bangla);
+    expect(values.some((v) => typeof v === 'string' && v.includes('Ã'))).toBe(false);
+  });
+
+  it('keeps a Bangla office name in the heading', async () => {
+    await generateMonthlyXLSX({ ...config, officeName: 'ঢাকা অফিস' }, SIGNATURES);
+    const { sheet } = readCells();
+    expect(sheet.A1.v).toContain('ঢাকা');
+  });
+});
+
+// Formatting is asserted on the worksheet, not on a re-read file: the XLSX
+// reader discards cell styles, so a round-trip cannot see fills or borders.
+describe('sheet formatting', () => {
+  const CONFIG = {
+    receipts: [receipt(), receipt({ id: 'r2', total: 85 })],
+    officeName: 'Strativ Dhaka',
+    year: 2026,
+    month: 8,
+    columns: COLUMNS,
+  };
+
+  const build = () => buildBillApprovalSheet(CONFIG, SIGNATURES).ws;
+
+  const cellsOf = (ws: Record<string, any>) =>
+    Object.keys(ws).filter((k) => !k.startsWith('!'));
+
+  it('paints every cell white so a dark-mode viewer still shows paper', () => {
+    const ws = build();
+    const unpainted = cellsOf(ws).filter((k) => !ws[k].s?.fill?.fgColor?.rgb);
+    expect(unpainted).toEqual([]);
+  });
+
+  it('gives the summary label room for its longest text', () => {
+    const ws = build();
+    const labelKey = cellsOf(ws).find(
+      (k) => ws[k].v === 'Amount Received from Account'
+    )!;
+    const { r, c } = XLSX.utils.decode_cell(labelKey);
+    const merge = ws['!merges'].find((m: any) => m.s.r === r && m.s.c === c);
+
+    // "Amount Received from Account" is 28 chars; columns are 16 wide, so it
+    // needs at least two of them merged (it used to get exactly one).
+    expect(merge.e.c - merge.s.c + 1).toBeGreaterThanOrEqual(2);
+  });
+
+  // The reported bug needed 7 columns: floor(7/4)=1 gave blocks of 1,1,1,4 and
+  // "Approved By" sprawled across half the sheet.
+  it.each([4, 5, 6, 7, 9])(
+    'splits the four signature blocks evenly across %i columns',
+    (count) => {
+      const columns = Array.from({ length: count }, (_, i) => ({
+        field: i === 0 ? 'receipt_date' : `field_${i}`,
+        label: `Col ${i}`,
+        enabled: true,
+        order: i,
+      }));
+
+      const ws = buildBillApprovalSheet({ ...CONFIG, columns }, SIGNATURES).ws;
+      const roleKey = cellsOf(ws).find((k) => ws[k].v === 'Prepared By')!;
+      const row = XLSX.utils.decode_cell(roleKey).r;
+      const merged = ws['!merges'].filter((m: any) => m.s.r === row);
+
+      // Reconstruct each block's width, counting single unmerged columns too
+      const spans = [0, 1, 2, 3].map((i) => {
+        const start = Math.floor((i * count) / 4);
+        const m = merged.find((x: any) => x.s.c === start);
+        return m ? m.e.c - m.s.c + 1 : 1;
+      });
+
+      expect(spans.reduce((a, b) => a + b, 0)).toBe(count);
+      expect(Math.max(...spans) - Math.min(...spans)).toBeLessThanOrEqual(1);
+    }
+  );
+
+  it('wraps signatory text instead of clipping it in a narrow block', () => {
+    const ws = build();
+    const key = cellsOf(ws).find(
+      (k) => ws[k].v === 'Designation: Accounts Officer'
+    )!;
+    expect(ws[key].s.alignment.wrapText).toBe(true);
+  });
+
+  it('makes the signature row tall enough to sign', () => {
+    const ws = build();
+    const key = cellsOf(ws).find((k) => ws[k].v === 'Signature:')!;
+    const row = XLSX.utils.decode_cell(key).r;
+    expect(ws['!rows'][row].hpt).toBeGreaterThanOrEqual(30);
+  });
+
+});
+
+describe('exportReceiptsAsSheet', () => {
+  it('labels a single-month selection with that month', async () => {
+    await exportReceiptsAsSheet([
+      receipt({ receipt_date: '2026-08-15' }),
+      receipt({ id: 'r2', receipt_date: '2026-08-20' }),
+    ]);
+
+    const { values } = readCells();
+    expect(values).toEqual(expect.arrayContaining(['Month: August 2026']));
+  });
+
+  it('does not pretend a cross-month selection is one month', async () => {
+    await exportReceiptsAsSheet([
+      receipt({ receipt_date: '2026-07-15' }),
+      receipt({ id: 'r2', receipt_date: '2026-08-20' }),
+    ]);
+
+    const { values } = readCells();
+    expect(values).toEqual(expect.arrayContaining(['Month: Selected Receipts']));
+  });
+
+  it('refuses an empty selection', async () => {
+    await expect(exportReceiptsAsSheet([])).rejects.toThrow(/No receipts/);
   });
 });

@@ -54,6 +54,9 @@ export interface ExportColumnConfig {
 
 let db: SQLite.SQLiteDatabase | null = null;
 let isInitialized = false;
+// Two callers hitting a cold database at once (e.g. Promise.all over config
+// reads) would each run the schema migration. Share the in-flight init.
+let initPromise: Promise<void> | null = null;
 
 /**
  * Initialize the database and create tables
@@ -62,7 +65,17 @@ export async function initDatabase(): Promise<void> {
   if (isInitialized && db) {
     return; // Already initialized
   }
+  if (initPromise) {
+    return initPromise; // Another caller is already doing it
+  }
 
+  initPromise = runInit().finally(() => {
+    initPromise = null;
+  });
+  return initPromise;
+}
+
+async function runInit(): Promise<void> {
   try {
     db = await SQLite.openDatabaseAsync(DB_NAME);
 
@@ -161,7 +174,13 @@ export async function migrateToMonthlyExport(
       "PRAGMA table_info(receipts)",
     );
     if (!columns.some((column) => column.name === "synced_at")) {
-      await database.execAsync("ALTER TABLE receipts ADD COLUMN synced_at TEXT");
+      try {
+        await database.execAsync("ALTER TABLE receipts ADD COLUMN synced_at TEXT");
+      } catch (error) {
+        // Belt and braces: PRAGMA reads can come back empty on some drivers,
+        // and adding a column that already exists is not a failure.
+        if (!String(error).includes("duplicate column")) throw error;
+      }
     }
   } catch (error) {
     console.error("Failed to run monthly export migration:", error);

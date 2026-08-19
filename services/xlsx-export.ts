@@ -13,6 +13,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import XLSX from "xlsx-js-style";
 import { Receipt } from "@/types/receipt";
+import { getColumns, getOfficeName } from "./config";
 import { ExportColumnConfig, formatMonthlyPeriod } from "./storage";
 
 const EXPORT_DIR = `${FileSystem.documentDirectory}exports/`;
@@ -21,6 +22,11 @@ const EXPORT_DIR = `${FileSystem.documentDirectory}exports/`;
 const BRAND = "FE5001";
 const WARM_BLACK = "1A0E1C";
 const ZEBRA = "F7F5F6";
+/** Explicit paper white: without a fill, viewers in dark mode render the sheet
+ *  on their own dark background and it stops looking like a document. */
+const WHITE = "FFFFFF";
+
+type Person = { name: string; designation: string };
 
 const MONEY_FMT = "#,##0.00";
 
@@ -35,6 +41,8 @@ export interface MonthlyExportConfig {
   columns: ExportColumnConfig[];
   /** Cash drawn from the account for the month; defaults to the bill total */
   amountReceived?: number;
+  /** Overrides the "Month: …" heading for an ad-hoc selection of receipts */
+  periodLabel?: string;
   includeImages?: boolean;
 }
 
@@ -168,6 +176,36 @@ export async function generateMonthlyXLSX(
   config: MonthlyExportConfig,
   signatures: SignatureConfig,
 ): Promise<string> {
+  const { ws, periodLabel } = buildBillApprovalSheet(config, signatures);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, periodLabel.slice(0, 31));
+
+  const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+
+  await ensureExportDir();
+  const safeOffice = config.officeName
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+  const filename = `${safeOffice || "Office"}_Bill_Approval_${periodLabel.replace(/ /g, "_")}.xlsx`;
+  const filepath = `${EXPORT_DIR}${filename}`;
+
+  await FileSystem.writeAsStringAsync(filepath, base64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  return filepath;
+}
+
+/**
+ * Build the worksheet. Separate from file writing so the layout — merges, row
+ * heights, fills — can be asserted directly: the XLSX *reader* discards cell
+ * styles, so a write/read round-trip cannot check any of the formatting.
+ */
+export function buildBillApprovalSheet(
+  config: MonthlyExportConfig,
+  signatures: SignatureConfig,
+): { ws: Record<string, any>; periodLabel: string } {
   const { receipts, officeName, year, month } = config;
 
   if (receipts.length === 0) {
@@ -183,10 +221,12 @@ export async function generateMonthlyXLSX(
   // narrower so the blocks never collide.
   const width = Math.max(columns.length, 4);
   const lastCol = width - 1;
-  const periodLabel = formatMonthlyPeriod({ year, month, label: "" });
+  const periodLabel =
+    config.periodLabel ?? formatMonthlyPeriod({ year, month, label: "" });
 
   const ws: Record<string, any> = {};
   const merges: any[] = [];
+  const rowHeights: Record<number, number> = {};
   let r = 0;
 
   const put = (row: number, col: number, cell: Cell) => {
@@ -197,29 +237,37 @@ export async function generateMonthlyXLSX(
   };
 
   // ── Header block ────────────────────────────────────────────────────────
+  const paper = { fill: { fgColor: { rgb: WHITE } } };
+
   put(r, 0, text(officeName.toUpperCase(), {
+    ...paper,
     font: { bold: true, sz: 16, color: { rgb: WARM_BLACK } },
     alignment: { horizontal: "center", vertical: "center" },
   }));
   mergeRow(r, 0, lastCol);
+  rowHeights[r] = 28;
   r++;
 
   put(r, 0, text("Bill Approval Sheet", {
+    ...paper,
     font: { bold: true, sz: 14, color: { rgb: WARM_BLACK } },
     alignment: { horizontal: "center" },
   }));
   mergeRow(r, 0, lastCol);
+  rowHeights[r] = 22;
   r++;
 
   r++; // spacer
 
   const half = Math.max(1, Math.floor(width / 2));
-  put(r, 0, text(`Month: ${periodLabel}`, { font: { bold: true } }));
+  put(r, 0, text(`Month: ${periodLabel}`, { ...paper, font: { bold: true } }));
   mergeRow(r, 0, half - 1);
-  put(r, half, text("Approval Date: ____________________", {
+  put(r, half, text("Approval Date:", {
+    ...paper,
     alignment: { horizontal: "right" },
   }));
   mergeRow(r, half, lastCol);
+  rowHeights[r] = 20;
   r++;
 
   r++; // spacer
@@ -237,10 +285,12 @@ export async function generateMonthlyXLSX(
   const headerRow = r;
   r++;
 
-  const firstDataRow = r;
+  rowHeights[r] = 26;
   receipts.forEach((receipt, i) => {
     const values = formatReceiptRow(receipt, columns);
-    const zebra = i % 2 === 1 ? { fill: { fgColor: { rgb: ZEBRA } } } : {};
+    const zebra = {
+      fill: { fgColor: { rgb: i % 2 === 1 ? ZEBRA : WHITE } },
+    };
 
     columns.forEach((col, c) => {
       const value = values[col.label];
@@ -269,11 +319,13 @@ export async function generateMonthlyXLSX(
   const summary = calculateSummary(receipts, config.amountReceived);
   const labelStyle = {
     font: { bold: true },
+    fill: { fgColor: { rgb: WHITE } },
     alignment: { horizontal: "right" },
     border: BORDER,
   };
   const valueStyle = {
     font: { bold: true },
+    fill: { fgColor: { rgb: WHITE } },
     alignment: { horizontal: "right" },
     border: BORDER,
   };
@@ -285,10 +337,14 @@ export async function generateMonthlyXLSX(
   ];
 
   const valueCol = lastCol;
-  const labelFrom = Math.max(0, valueCol - 2);
+  // "Amount Received from Account" is ~28 characters; a two-column merge
+  // clipped it to "unt Received from Account". Give the label half the sheet.
+  const labelFrom = Math.max(0, Math.min(valueCol - 1, Math.floor(width / 2) - 1));
   for (const [label, value] of summaryRows) {
     put(r, labelFrom, text(label, labelStyle));
     if (labelFrom < valueCol - 1) mergeRow(r, labelFrom, valueCol - 1);
+    // Keep the cells the label merges over inside the border grid
+    for (let c = labelFrom + 1; c < valueCol; c++) put(r, c, text("", labelStyle));
     put(r, valueCol, money(value, valueStyle));
     r++;
   }
@@ -303,42 +359,75 @@ export async function generateMonthlyXLSX(
     ["Approved By", signatures.approvedBy],
   ];
 
-  // Spread the four blocks evenly across the sheet width
-  const span = Math.max(1, Math.floor(width / 4));
+  // Proportional split, so the remainder is shared instead of dumped on the
+  // last block: floor(i*width/4) gave 1,1,1,4 columns for a 7-column sheet.
+  const blockStart = (i: number) => Math.floor((i * width) / 4);
+  const blockEnd = (i: number) => Math.floor(((i + 1) * width) / 4) - 1;
+
   const roleStyle = {
     font: { bold: true, color: { rgb: WARM_BLACK } },
-    alignment: { horizontal: "center" },
+    fill: { fgColor: { rgb: WHITE } },
+    alignment: { horizontal: "center", vertical: "center" },
     border: BORDER,
   };
-  const fieldStyle = { border: BORDER, alignment: { horizontal: "left" } };
+  const fieldStyle = {
+    fill: { fgColor: { rgb: WHITE } },
+    // wrapText: a 7-column sheet cannot split 4 ways evenly, so the narrowest
+    // block must be able to hold "Designation: Accounts Officer" on two lines
+    // rather than clipping it.
+    alignment: { horizontal: "left", vertical: "center", wrapText: true },
+    border: BORDER,
+  };
 
-  const blockStart = (i: number) => i * span;
-  const blockEnd = (i: number) => (i === 3 ? lastCol : (i + 1) * span - 1);
-
-  roles.forEach(([role], i) => {
-    put(r, blockStart(i), text(role, roleStyle));
-    if (blockEnd(i) > blockStart(i)) mergeRow(r, blockStart(i), blockEnd(i));
-  });
-  r++;
-
-  const fieldRows: ((s: { name: string; designation: string }) => string)[] = [
-    (s) => `Name: ${s.name || "________________"}`,
-    (s) => `Designation: ${s.designation || "________________"}`,
-    () => "Signature: ________________",
-  ];
-
-  for (const render of fieldRows) {
-    roles.forEach(([, person], i) => {
-      put(r, blockStart(i), text(render(person), fieldStyle));
-      if (blockEnd(i) > blockStart(i)) mergeRow(r, blockStart(i), blockEnd(i));
+  const writeBlockRow = (
+    render: (role: string, person: Person) => string,
+    style: any,
+  ) => {
+    roles.forEach(([role, person], i) => {
+      const from = blockStart(i);
+      const to = Math.max(from, blockEnd(i));
+      put(r, from, text(render(role, person), style));
+      for (let c = from + 1; c <= to; c++) put(r, c, text("", style));
+      if (to > from) mergeRow(r, from, to);
     });
     r++;
+  };
+
+  writeBlockRow((role) => role, roleStyle);
+
+  // No underscore runs: they overflowed a narrow block and got clipped. The
+  // bordered cell is the space to write in, and the row is tall enough to sign.
+  const signatureRows: [(person: Person) => string, number | null][] = [
+    // No fixed height on these two: wrapped text needs to grow the row itself
+    [(person: Person) => `Name: ${person.name}`.trimEnd(), null],
+    [(person: Person) => `Designation: ${person.designation}`.trimEnd(), null],
+    // Taller: this is the row someone signs by hand
+    [() => "Signature:", 34],
+  ];
+
+  for (const [render, height] of signatureRows) {
+    if (height !== null) rowHeights[r] = height;
+    writeBlockRow((_role, person) => render(person), fieldStyle);
   }
 
   // ── Sheet metadata ──────────────────────────────────────────────────────
+  const lastRow = r - 1;
+
+  // Paint every untouched cell — spacer rows and the gaps beside the summary —
+  // so the whole document reads as white paper instead of picking up the
+  // viewer's dark theme.
+  for (let row = 0; row <= lastRow; row++) {
+    for (let c = 0; c <= lastCol; c++) {
+      const address = XLSX.utils.encode_cell({ r: row, c });
+      if (!ws[address]) {
+        ws[address] = { v: "", t: "s", s: { fill: { fgColor: { rgb: WHITE } } } };
+      }
+    }
+  }
+
   ws["!ref"] = XLSX.utils.encode_range({
     s: { r: 0, c: 0 },
-    e: { r: r - 1, c: lastCol },
+    e: { r: lastRow, c: lastCol },
   });
   ws["!merges"] = merges;
   ws["!cols"] = Array.from({ length: width }, (_, c) => {
@@ -349,29 +438,56 @@ export async function generateMonthlyXLSX(
     if (field === "currency") return { wch: 10 };
     return { wch: 16 };
   });
-  ws["!rows"] = [{ hpt: 24 }, { hpt: 20 }];
-  // Repeat the header row when the sheet runs over several printed pages
-  ws["!autofilter"] = {
-    ref: XLSX.utils.encode_range({
-      s: { r: headerRow, c: 0 },
-      e: { r: lastDataRow, c: columns.length - 1 },
-    }),
-  };
-  ws["!freeze"] = { xSplit: 0, ySplit: firstDataRow };
+  ws["!rows"] = Array.from({ length: lastRow + 1 }, (_, row) =>
+    rowHeights[row] ? { hpt: rowHeights[row] } : {},
+  );
+  // No autofilter and no freeze panes: the filter arrows sat in the middle of
+  // the printed header, and both are the "some Excel features can't be
+  // displayed" warning that viewers show. This is a document to read and sign,
+  // not a workbook to slice.
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, periodLabel.slice(0, 31));
+  return { ws, periodLabel };
+}
 
-  const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+/** Signatories are left blank on ad-hoc exports and print as lines to sign */
+const BLANK_SIGNATURES: SignatureConfig = {
+  preparedBy: { name: "", designation: "" },
+  checkedBy: { name: "", designation: "" },
+  reviewedBy: { name: "", designation: "" },
+  approvedBy: { name: "", designation: "" },
+};
 
-  await ensureExportDir();
-  const safeOffice = officeName.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "");
-  const filename = `${safeOffice || "Office"}_Bill_Approval_${periodLabel.replace(" ", "_")}.xlsx`;
-  const filepath = `${EXPORT_DIR}${filename}`;
+/**
+ * Produce the house sheet for any set of receipts — one receipt from its detail
+ * screen, or a filtered list from History. Same layout as the monthly export so
+ * there is only ever one document format to read.
+ */
+export async function exportReceiptsAsSheet(
+  receipts: Receipt[],
+  label?: string,
+): Promise<string> {
+  if (receipts.length === 0) {
+    throw new Error("No receipts to export.");
+  }
 
-  await FileSystem.writeAsStringAsync(filepath, base64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  const [officeName, columns] = await Promise.all([getOfficeName(), getColumns()]);
 
-  return filepath;
+  // Date the sheet by the newest receipt; say "Selected Receipts" when the
+  // selection straddles months, rather than labelling it with one of them.
+  const monthOf = (r: Receipt) => (r.receipt_date || r.created_at).slice(0, 7);
+  const newest = receipts.reduce((a, b) => (monthOf(a) >= monthOf(b) ? a : b));
+  const [year, month] = monthOf(newest).split("-").map(Number);
+  const spansMonths = new Set(receipts.map(monthOf)).size > 1;
+
+  return generateMonthlyXLSX(
+    {
+      receipts,
+      officeName,
+      year,
+      month,
+      columns,
+      periodLabel: label ?? (spansMonths ? "Selected Receipts" : undefined),
+    },
+    BLANK_SIGNATURES,
+  );
 }

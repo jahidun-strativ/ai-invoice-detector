@@ -100,7 +100,8 @@ export interface ReceiptStats {
 /**
  * Export format options
  */
-export type ExportFormat = 'json' | 'csv';
+/** The office document is 'xlsx'; 'json' is a raw dump for backup/debugging */
+export type ExportFormat = 'json' | 'xlsx';
 
 /**
  * Processing state for capture screen

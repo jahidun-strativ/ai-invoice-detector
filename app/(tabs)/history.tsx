@@ -26,7 +26,8 @@ import { ReceiptCardSkeleton } from '@/components/ui/skeleton';
 import { Colors, Type } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { exportAndShare } from '@/services/export';
+import { exportAndShareJson, shareFile } from '@/services/export';
+import { exportReceiptsAsSheet } from '@/services/xlsx-export';
 import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { Receipt, InvoiceType } from '@/types/receipt';
 
@@ -120,27 +121,30 @@ export default function HistoryScreen() {
       return;
     }
 
-    Alert.alert('Export Receipts', 'Choose export format', [
+    Alert.alert('Export Receipts', `${receipts.length} shown`, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'JSON',
+        text: 'Excel sheet',
         onPress: async () => {
           try {
             setIsExporting(true);
-            await exportAndShare(receipts, 'json');
-          } catch {
-            Alert.alert('Error', 'Failed to export receipts');
+            await shareFile(await exportReceiptsAsSheet(receipts));
+          } catch (error) {
+            Alert.alert(
+              'Error',
+              error instanceof Error ? error.message : 'Failed to export receipts'
+            );
           } finally {
             setIsExporting(false);
           }
         },
       },
       {
-        text: 'CSV',
+        text: 'Raw data (JSON)',
         onPress: async () => {
           try {
             setIsExporting(true);
-            await exportAndShare(receipts, 'csv');
+            await exportAndShareJson(receipts);
           } catch {
             Alert.alert('Error', 'Failed to export receipts');
           } finally {
