@@ -195,8 +195,77 @@ For Expo SDK major upgrades, follow the official upgrade guide, then rebuild dev
 
 ## 7) Pre-release Checklist
 
-1. `npx tsc --noEmit` and `npx expo lint` clean
-2. Manual pass in a dev client, light **and** dark mode: scan (printed EN / printed BN / handwritten BN) → save → dashboard updates → history filter/search → detail → edit (incl. totals typing) → export JSON/CSV → delete
-3. Settings tab: version/channel correct, update check works
-4. Wrong-API-key path shows a clean error (no retry storm)
-5. Decide OTA vs native build (see §1), then `npm run draft` / `npm run deploy`
+1. `npx tsc --noEmit`, `npx expo lint` and `pnpm test` clean
+2. Manual pass in a dev client, light **and** dark mode: scan (printed EN / printed BN / handwritten BN) → save → dashboard updates → history filter/search → detail → edit (incl. totals typing) → export Excel + JSON → delete
+3. Export tab: month list correct, generated sheet opens in Excel/Sheets with Bangla intact
+4. Settings tab: office name, version/channel correct, update check works
+5. Wrong-API-key path shows a clean error (no retry storm)
+6. Update `RELEASE_NOTES.docx` (see §8)
+7. Decide OTA vs native build (see §1), then `npm run draft` / `npm run deploy`
+
+## 8) Release Notes
+
+**One living document: `RELEASE_NOTES.docx` at the repo root.** Add each release as
+a new block **at the top**; never start a new file per release, and never rename it.
+The date heading is the only version marker that matters to readers.
+
+### Block structure (copy the previous block and overwrite it)
+
+```
+19 August 2026                                    <- H2, Strativ Orange #FE5001
+App version 1.0.0 · Android · Update channel: main <- 9.5pt, #4C434E
+  New Features      <- H3, Warm Black #1A0E1C
+  Fixes
+  Technical
+```
+
+Omit a section that has no entries — never leave a heading with "None" under it.
+
+### Gathering the data — do this every time, do not recall it
+
+| Field | Where it comes from |
+|---|---|
+| Release date | `date "+%d %B %Y"` — never assume today's date |
+| Scope | `git log --oneline <last-release-date-tag-or-hash>..HEAD` |
+| App version | `version` in `app.json` |
+| Channel | the `channel` of the profile being shipped, in `eas.json` |
+| Test count | the total line from `pnpm test` |
+
+Two traps that have already bitten:
+
+- **Uncommitted work is invisible to `git log`.** Check `git status` first; if the
+  release is still in the working tree, the log will describe the *previous* state.
+- **A feature added and removed inside the same release is not news.** Collapse it
+  to the outcome a reader cares about, or drop it entirely.
+
+### Wording
+
+Follow the `strativ-plugins:strativ-changelog` skill — it is the authority. In short:
+one entry per user-visible change (not per commit), active voice, benefit first, no
+commit hashes, no branch names, no jargon in New Features or Fixes. Anything only a
+developer would notice belongs in Technical.
+
+The **Post-Deploy Steps** section that skill describes is for Magento 2 and
+WordPress only. This is an Expo app, so deploy steps go in the release *message*
+(`eas update -m "…"`) and in §1, not in the document.
+
+### Regenerating the document from scratch
+
+Only needed if the file is lost — normally you edit it in place. There is no
+`python-docx` or `pandoc` on the build machine; macOS `textutil` does the job:
+
+```bash
+textutil -convert docx -output RELEASE_NOTES.docx source.html
+```
+
+**Then fix the colours.** Cocoa converts sRGB to generic RGB on import, so
+`#FE5001` lands as `FA3808` and warm black as `140C15` — both off-brand:
+
+```bash
+unzip -q RELEASE_NOTES.docx -d /tmp/docx && \
+  sed -i '' 's/FA3808/FE5001/g; s/140C15/1A0E1C/g; s/3B333D/4C434E/g' \
+    /tmp/docx/word/document.xml && \
+  (cd /tmp/docx && zip -q -r -X ../fixed.docx .) && mv /tmp/fixed.docx RELEASE_NOTES.docx
+```
+
+Verify with `unzip -p RELEASE_NOTES.docx word/document.xml | grep -o 'w:val="FE5001"'`.
