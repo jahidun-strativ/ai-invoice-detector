@@ -5,7 +5,7 @@
 
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -32,6 +32,8 @@ export default function TabLayout() {
           height: 68,
           borderRadius: 34,
           backgroundColor: colors.card,
+          // Let the raised Scan button sit proud of the pill
+          overflow: 'visible',
           borderTopWidth: 0,
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: colors.border,
@@ -67,15 +69,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="capture"
-        options={{
-          title: 'Scan',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="camera.fill" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="history"
         options={{
           title: 'History',
@@ -85,6 +78,30 @@ export default function TabLayout() {
               name={focused ? 'clock.fill' : 'clock'}
               color={color}
             />
+          ),
+        }}
+      />
+      {/* Centre slot: the app's primary action, raised out of the pill.
+          Works as a true centre only because there are five tabs. */}
+      <Tabs.Screen
+        name="capture"
+        options={{
+          title: 'Scan',
+          tabBarShowLabel: false,
+          tabBarIcon: ({ focused }) => (
+            <View
+              style={[
+                styles.scanButton,
+                {
+                  backgroundColor: colors.tint,
+                  borderColor: colors.card,
+                  shadowColor: colors.warmBlack,
+                },
+                focused && styles.scanButtonFocused,
+              ]}
+            >
+              <IconSymbol size={26} name="camera.fill" color="#fff" />
+            </View>
           ),
         }}
       />
@@ -113,3 +130,26 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  scanButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Raised out of the pill; the ring in card colour reads as a cut-out
+    marginTop: -24,
+    borderWidth: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  scanButtonFocused: {
+    // Solid fill only — brand rule forbids gradients, so pressed state is a
+    // subtle lift rather than a colour shift
+    shadowOpacity: 0.34,
+    elevation: 12,
+  },
+});
