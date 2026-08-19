@@ -7,6 +7,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "android": {
         "image": "latest"
       },
@@ -25,6 +26,7 @@
     "preview": {
       "distribution": "internal",
       "channel": "main",
+      "environment": "preview",
       "android": {
         "image": "latest"
       },
@@ -34,6 +36,7 @@
     },
     "production": {
       "channel": "production",
+      "environment": "production",
       "autoIncrement": true,
       "android": {
         "image": "latest"
