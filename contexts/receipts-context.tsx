@@ -32,7 +32,7 @@ import {
   refreshRemoteConfig,
   syncReceipt,
 } from '@/services/remote-db';
-import { syncPendingReceipts } from '@/services/config';
+import { pullRemoteReceipts } from '@/services/config';
 import {
   InvoiceType,
   Receipt,
@@ -175,6 +175,15 @@ export function ReceiptsProvider({ children }: { children: ReactNode }) {
     async (id: string, input: ReceiptInput) => {
       const saved = await updateReceipt(id, input);
       refresh();
+      // The edit reset synced_at, so push the corrected row now rather than
+      // leaving stale values in the database until the next launch.
+      if (saved && isRemoteConfigured()) {
+        syncReceipt(saved)
+          .then(() => markReceiptsSynced([saved.id]))
+          .catch((error) => {
+            console.warn('Remote sync failed; edit is saved locally:', error);
+          });
+      }
       return saved;
     },
     [refresh],
@@ -203,11 +212,16 @@ export function ReceiptsProvider({ children }: { children: ReactNode }) {
         await refreshRemoteConfig();
         if (!cancelled) await refresh();
 
-        // Catch up anything scanned without signal. Fire-and-forget: the app
-        // is fully usable whether or not the database is reachable.
-        syncPendingReceipts().catch((error) => {
-          console.warn('Pending sync failed; will retry next launch:', error);
-        });
+        // Push what this device owes, then pull the rest of the office's
+        // scans. Fire-and-forget: the app is fully usable whether or not the
+        // database is reachable.
+        pullRemoteReceipts()
+          .then((imported) => {
+            if (imported > 0 && !cancelled) refresh();
+          })
+          .catch((error) => {
+            console.warn('Team sync failed; will retry next launch:', error);
+          });
       } catch (error) {
         if (!cancelled) {
           dispatch({

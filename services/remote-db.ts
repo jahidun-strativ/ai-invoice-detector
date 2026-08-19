@@ -40,15 +40,19 @@
  *
  *   alter table receipts enable row level security;
  *
- *   -- Write-only for the app's anon key: it can add and update rows but
- *   -- cannot read the table back, so the key in the bundle leaks nothing.
  *   create policy "app inserts" on receipts
  *     for insert to anon with check (true);
  *   create policy "app upserts" on receipts
  *     for update to anon using (true) with check (true);
  *
- * Read the data with the service key from your own dashboard/BI tool, never
- * from the app.
+ *   -- Shared team view: every device reads the whole office's receipts, which
+ *   -- is what makes one phone show another phone's scans. Note the trade-off —
+ *   -- the anon key is extractable from the APK, so anyone holding it can read
+ *   -- merchant names, amounts and dates. Add Supabase Auth if that matters.
+ *   create policy "app reads" on receipts
+ *     for select to anon using (true);
+ *
+ * No delete policy on purpose: a leaked key must not be able to wipe records.
  */
 
 import { Receipt } from "@/types/receipt";
@@ -241,6 +245,65 @@ async function send(rows: Receipt[]): Promise<void> {
       `Remote sync failed (${response.status})${detail ? `: ${detail.slice(0, 120)}` : ""}`,
     );
   }
+}
+
+/**
+ * Pull the office's receipts back down, so a scan taken on one phone shows up
+ * on every other phone. Supabase only — a generic endpoint has no agreed read
+ * shape.
+ *
+ * Rows carry no image: photos stay on the device that took them, so
+ * `image_uri` comes back empty and the UI falls back to a blank thumbnail.
+ */
+export async function fetchRemoteReceipts(limit: number = 2000): Promise<Receipt[]> {
+  if (!cachedUrl || !isSupabaseUrl(cachedUrl) || !cachedKey) return [];
+
+  const query = `select=*&order=created_at.desc&limit=${limit}`;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${supabaseEndpoint(cachedUrl)}?${query}`, {
+      headers: { apikey: cachedKey, Authorization: `Bearer ${cachedKey}` },
+      signal: abort.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(
+      `Could not read the database (${response.status})${detail ? `: ${detail.slice(0, 120)}` : ""}`,
+    );
+  }
+
+  const rows = (await response.json()) as any[];
+  return rows.map(fromRemoteRow);
+}
+
+/** Remote row -> Receipt. Tolerates nulls; the table is not the app's schema. */
+export function fromRemoteRow(row: any): Receipt {
+  return {
+    id: String(row.id),
+    merchant_name: row.merchant_name ?? null,
+    receipt_date: row.receipt_date ?? null,
+    receipt_number: row.receipt_number ?? null,
+    invoice_type: row.invoice_type ?? "unknown",
+    items: Array.isArray(row.items) ? row.items : [],
+    subtotal: row.subtotal === null || row.subtotal === undefined ? null : Number(row.subtotal),
+    tax: row.tax === null || row.tax === undefined ? null : Number(row.tax),
+    total: Number(row.total) || 0,
+    currency: row.currency ?? "BDT",
+    payment_method: row.payment_method ?? null,
+    confidence_score: Number(row.confidence_score) || 0,
+    // The photo never left the device that scanned it
+    image_uri: "",
+    raw_text: row.raw_text ?? null,
+    error_message: row.error_message ?? null,
+    created_at: row.created_at ?? new Date().toISOString(),
+  };
 }
 
 /**

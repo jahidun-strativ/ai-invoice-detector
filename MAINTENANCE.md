@@ -117,11 +117,15 @@ eas env:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY --scope project
 - **Diagnosing "rows aren't arriving"**: there is no in-app indicator by design. Check the
   device log for `receipt(s) still waiting to reach the database`, or query the table with
   the service key and compare counts against the app's month totals.
-- **Sync is push-only, on purpose.** The app cannot read the table (no `select` policy), so
-  it can never tell "the table is empty" apart from "I am not allowed to look" or "the
-  request failed". Deleting local rows to match an apparently-empty table would therefore
-  wipe good data — including scans that had not uploaded yet. Local is always the source of
-  truth; agreement is restored by pushing.
+- **Sync is two-way, and every device sees the whole office.** Each phone pushes its own
+  scans and pulls everyone else's on app start and whenever the Export tab is opened, so
+  the monthly sheet covers the team instead of one device. Requires the `select` policy
+  from the DDL — without it the pull returns 401 and each phone shows only its own scans.
+- **The pull never deletes.** An empty read is indistinguishable from a blocked or failed
+  one, so clearing local rows to match the table would wipe good data, including scans not
+  yet uploaded. Import only adds or refreshes.
+- **Photos stay on the device that took them.** Imported receipts have an empty `image_uri`
+  and show a blank thumbnail; only the phone that scanned a receipt has its picture.
 - **After truncating the table**: Settings → DATA → **Re-upload all receipts** clears
   `synced_at` on every row and pushes them again (batches of 500, up to 10k). Safe to run
   any time — the upsert is keyed on receipt id, so re-running against a full table is a

@@ -6,6 +6,8 @@
 
 import {
   batchSyncReceipts,
+  fetchRemoteReceipts,
+  fromRemoteRow,
   isMisconfigured,
   isRemoteConfigured,
   isSupabaseUrl,
@@ -18,11 +20,14 @@ import {
 } from '../remote-db';
 import {
   createReceipt,
+  getReceipts,
   getUnsyncedReceipts,
+  importRemoteReceipts,
   markReceiptsSynced,
   resetSyncState,
   setDatabaseUrl,
   setOfficeName,
+  updateReceipt,
 } from '../storage';
 import { Receipt } from '@/types/receipt';
 
@@ -236,6 +241,106 @@ describe('endpoint comes from the build', () => {
   });
 });
 
+describe('reading the team\'s receipts', () => {
+  beforeEach(configureSupabase);
+
+  it('maps a remote row into a receipt with no local image', () => {
+    const mapped = fromRemoteRow({
+      id: 'remote-1',
+      merchant_name: 'Unimart',
+      receipt_date: '2026-08-12',
+      invoice_type: 'retail',
+      items: [{ name: 'Tea', quantity: 2, price: 40 }],
+      total: '80.00',
+      tax: null,
+      currency: 'BDT',
+      created_at: '2026-08-12T09:00:00.000Z',
+    });
+
+    expect(mapped.total).toBe(80);
+    expect(typeof mapped.total).toBe('number');
+    expect(mapped.items).toHaveLength(1);
+    expect(mapped.image_uri).toBe('');
+    expect(mapped.tax).toBeNull();
+  });
+
+  it('survives a sparse row rather than throwing', () => {
+    const mapped = fromRemoteRow({ id: 'x', total: null });
+    expect(mapped.invoice_type).toBe('unknown');
+    expect(mapped.items).toEqual([]);
+    expect(mapped.total).toBe(0);
+  });
+
+  it('fetches with the read query and auth headers', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => [] });
+    await fetchRemoteReceipts();
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain('/rest/v1/receipts?select=*');
+    expect(init.headers.apikey).toBe(KEY);
+  });
+
+  it('explains a blocked read instead of returning nothing', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'permission denied',
+    });
+    await expect(fetchRemoteReceipts()).rejects.toThrow(/401/);
+  });
+
+  it('imports a teammate\'s receipt but never overwrites one scanned here', async () => {
+    const mine = await createReceipt({
+      merchant_name: 'Scanned Here',
+      receipt_date: '2026-08-18',
+      receipt_number: null,
+      invoice_type: 'retail',
+      items: [],
+      subtotal: null,
+      tax: null,
+      total: 70,
+      currency: 'BDT',
+      payment_method: null,
+      confidence_score: 0.9,
+      image_uri: 'file:///local-photo.jpg',
+      raw_text: null,
+      error_message: null,
+    });
+
+    const imported = await importRemoteReceipts([
+      fromRemoteRow({
+        id: 'teammate-1',
+        merchant_name: 'Their Shop',
+        receipt_date: '2026-08-18',
+        invoice_type: 'retail',
+        items: [],
+        total: 55,
+        currency: 'BDT',
+        created_at: '2026-08-18T08:00:00.000Z',
+      }),
+      // Same id as the local one, with the remote's empty image and a wrong total
+      fromRemoteRow({ id: mine.id, total: 999, currency: 'BDT' }),
+    ]);
+
+    expect(imported).toBe(1);
+
+    const all = await getReceipts();
+    const teammate = all.find((r) => r.id === 'teammate-1');
+    const local = all.find((r) => r.id === mine.id);
+
+    expect(teammate?.merchant_name).toBe('Their Shop');
+    expect(local?.total).toBe(70); // untouched
+    expect(local?.image_uri).toBe('file:///local-photo.jpg');
+  });
+
+  it('counts imported rows as already synced', async () => {
+    await importRemoteReceipts([
+      fromRemoteRow({ id: 'teammate-2', total: 10, currency: 'BDT' }),
+    ]);
+    expect((await getUnsyncedReceipts()).map((r) => r.id)).not.toContain('teammate-2');
+  });
+});
+
 describe('unsynced receipts are retried, not lost', () => {
   it('leaves a failed receipt pending and syncs it on the next run', async () => {
     await configureSupabase();
@@ -266,6 +371,32 @@ describe('unsynced receipts are retried, not lost', () => {
 
     const stillPending = await getUnsyncedReceipts();
     expect(stillPending.map((r) => r.id)).not.toContain(saved.id);
+  });
+
+  it('re-queues a receipt that was edited after it synced', async () => {
+    const saved = await createReceipt({
+      merchant_name: 'Meena Bazar',
+      receipt_date: '2026-08-17',
+      receipt_number: null,
+      invoice_type: 'retail',
+      items: [],
+      subtotal: null,
+      tax: null,
+      total: 90,
+      currency: 'BDT',
+      payment_method: null,
+      confidence_score: 0.7,
+      image_uri: 'file:///b.jpg',
+      raw_text: null,
+      error_message: null,
+    });
+    await markReceiptsSynced([saved.id]);
+    expect((await getUnsyncedReceipts()).map((r) => r.id)).not.toContain(saved.id);
+
+    // The AI read the total wrong and someone corrected it
+    await updateReceipt(saved.id, { total: 95 });
+
+    expect((await getUnsyncedReceipts()).map((r) => r.id)).toContain(saved.id);
   });
 
   it('queues everything again after a re-upload, without deleting anything', async () => {

@@ -9,6 +9,7 @@ import {
   getAppConfig,
   getExportColumns,
   getUnsyncedReceipts,
+  importRemoteReceipts,
   markReceiptsSynced,
   resetSyncState,
   setExportColumns,
@@ -16,6 +17,7 @@ import {
 } from "./storage";
 import {
   batchSyncReceipts,
+  fetchRemoteReceipts,
   isMisconfigured,
   isRemoteConfigured,
   refreshRemoteConfig,
@@ -102,6 +104,23 @@ export async function updateColumns(columns: ExportColumnConfig[]): Promise<void
 
 export async function resetColumnsToDefault(): Promise<void> {
   await setExportColumns(DEFAULT_COLUMNS);
+}
+
+/**
+ * Pull the office's receipts down from the shared database and merge them in.
+ * This is what makes a scan taken on one phone appear on every other phone.
+ *
+ * Push first: a receipt sitting unsynced locally should reach the table before
+ * we ask the table what it holds, otherwise it looks briefly like the office
+ * has fewer receipts than it does.
+ */
+export async function pullRemoteReceipts(): Promise<number> {
+  await refreshRemoteConfig();
+  if (!isRemoteConfigured() || isMisconfigured()) return 0;
+
+  await syncPendingReceipts();
+  const remote = await fetchRemoteReceipts();
+  return importRemoteReceipts(remote);
 }
 
 /**

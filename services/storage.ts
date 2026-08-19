@@ -170,6 +170,80 @@ export async function migrateToMonthlyExport(
 }
 
 /**
+ * Merge receipts pulled from the shared database into local storage, so every
+ * phone shows the whole office's scans and exports one combined sheet.
+ *
+ * Ownership rule: a receipt scanned on THIS device is never overwritten — its
+ * row keeps the local image path and any local edit. Rows that arrived from the
+ * database (recognised by an empty image_uri) are refreshed, so a correction
+ * made on the phone that owns a receipt reaches everyone else.
+ *
+ * Returns how many rows were added or refreshed.
+ */
+export async function importRemoteReceipts(receipts: Receipt[]): Promise<number> {
+  if (receipts.length === 0) return 0;
+
+  const database = await getDb();
+  const now = new Date().toISOString();
+  let changed = 0;
+
+  for (const receipt of receipts) {
+    const existing = await database.getFirstAsync<{ image_uri: string }>(
+      "SELECT image_uri FROM receipts WHERE id = ?",
+      [receipt.id],
+    );
+
+    if (existing && existing.image_uri) {
+      continue; // scanned here — this device owns it
+    }
+
+    const values = [
+      receipt.merchant_name,
+      receipt.receipt_date,
+      receipt.receipt_number,
+      receipt.invoice_type,
+      JSON.stringify(receipt.items),
+      receipt.subtotal,
+      receipt.tax,
+      receipt.total,
+      receipt.currency,
+      receipt.payment_method,
+      receipt.confidence_score,
+      receipt.raw_text,
+      receipt.error_message,
+      receipt.created_at,
+      now,
+      receipt.id,
+    ];
+
+    if (existing) {
+      await database.runAsync(
+        `UPDATE receipts SET
+          merchant_name = ?, receipt_date = ?, receipt_number = ?, invoice_type = ?,
+          items = ?, subtotal = ?, tax = ?, total = ?, currency = ?, payment_method = ?,
+          confidence_score = ?, raw_text = ?, error_message = ?, created_at = ?,
+          synced_at = ?
+        WHERE id = ?`,
+        values,
+      );
+    } else {
+      await database.runAsync(
+        `INSERT INTO receipts (
+          merchant_name, receipt_date, receipt_number, invoice_type,
+          items, subtotal, tax, total, currency, payment_method,
+          confidence_score, raw_text, error_message, created_at,
+          synced_at, id, image_uri
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
+        values,
+      );
+    }
+    changed++;
+  }
+
+  return changed;
+}
+
+/**
  * Delete every receipt. Returns how many rows went, so the caller can confirm
  * something specific rather than a bare "done".
  *
@@ -428,7 +502,11 @@ export async function updateReceipt(
       confidence_score = ?,
       image_uri = ?,
       raw_text = ?,
-      error_message = ?
+      error_message = ?,
+      -- Any edit invalidates the copy in the remote database, so the row goes
+      -- back to pending and the next sync re-sends it. Without this, a receipt
+      -- corrected after scanning would keep its wrong values there forever.
+      synced_at = NULL
     WHERE id = ?`,
     [
       updated.merchant_name,

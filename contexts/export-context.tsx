@@ -14,7 +14,7 @@ import {
   useState,
 } from 'react';
 import * as Sharing from 'expo-sharing';
-import { getColumns, getOfficeName } from '@/services/config';
+import { getColumns, getOfficeName, pullRemoteReceipts } from '@/services/config';
 import {
   getMonthlyPeriods,
   getReceiptsByMonth,
@@ -58,6 +58,11 @@ export function ExportProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
+      // The month's sheet must cover the whole office, not just this phone, so
+      // pull the team's scans before counting. Failure is non-fatal — the
+      // export then covers whatever is on the device.
+      await pullRemoteReceipts().catch(() => 0);
+
       const [nextPeriods, name] = await Promise.all([
         getMonthlyPeriods(),
         getOfficeName(),
