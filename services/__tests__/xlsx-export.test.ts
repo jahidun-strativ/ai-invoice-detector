@@ -300,6 +300,22 @@ describe('sheet formatting', () => {
     expect(ws[key].s.alignment.wrapText).toBe(true);
   });
 
+  it('leaves a box to write the approval date in', () => {
+    const ws = build();
+    const labelKey = cellsOf(ws).find((k) => ws[k].v === 'Approval Date:')!;
+    const { r, c } = XLSX.utils.decode_cell(labelKey);
+    const lastCol = XLSX.utils.decode_range(ws['!ref']).e.c;
+
+    // The label must not run to the edge of the sheet...
+    const merge = ws['!merges'].find((m: any) => m.s.r === r && m.s.c === c);
+    expect(merge ? merge.e.c : c).toBeLessThan(lastCol);
+
+    // ...and the cell it leaves behind must be an empty bordered box
+    const box = ws[XLSX.utils.encode_cell({ r, c: lastCol })];
+    expect(box.v).toBe('');
+    expect(box.s.border).toBeDefined();
+  });
+
   it('makes the signature row tall enough to sign', () => {
     const ws = build();
     const key = cellsOf(ws).find((k) => ws[k].v === 'Signature:')!;

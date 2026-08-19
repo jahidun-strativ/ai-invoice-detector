@@ -262,12 +262,17 @@ export function buildBillApprovalSheet(
   const half = Math.max(1, Math.floor(width / 2));
   put(r, 0, text(`Month: ${periodLabel}`, { ...paper, font: { bold: true } }));
   mergeRow(r, 0, half - 1);
-  put(r, half, text("Approval Date:", {
-    ...paper,
-    alignment: { horizontal: "right" },
-  }));
-  mergeRow(r, half, lastCol);
-  rowHeights[r] = 20;
+
+  // Label, then an empty bordered cell to write the date into. Merging the
+  // label all the way to the last column left it flush against the edge of the
+  // sheet with nowhere to write.
+  const dateLabelStyle = { ...paper, alignment: { horizontal: "right" } };
+  put(r, half, text("Approval Date:", dateLabelStyle));
+  for (let c = half + 1; c < lastCol; c++) put(r, c, text("", dateLabelStyle));
+  if (lastCol - 1 > half) mergeRow(r, half, lastCol - 1);
+  put(r, lastCol, text("", { ...paper, border: BORDER }));
+
+  rowHeights[r] = 22;
   r++;
 
   r++; // spacer
