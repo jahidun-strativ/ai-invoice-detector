@@ -10,6 +10,7 @@ import { Colors, ThemeColors, Type } from '@/constants/theme';
 import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { remoteImageSource } from '@/services/remote-db';
 import { formatCurrency } from '@/utils/format';
 import { LineItemRow } from './line-item';
 
@@ -42,7 +43,7 @@ export function ReceiptPreview({ receipt, showImage = true }: ReceiptPreviewProp
       {showImage && (
         <View style={styles.imageContainer}>
           <Image
-            source={{ uri: receipt.image_uri }}
+            source={remoteImageSource(receipt.image_uri)}
             style={styles.image}
             contentFit="contain"
             transition={200}

@@ -14,6 +14,7 @@ import {
 } from '@/constants/receipt-ui';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { remoteImageSource } from '@/services/remote-db';
 import { formatCurrency, formatDate } from '@/utils/format';
 
 interface ReceiptCardProps {
@@ -51,7 +52,7 @@ export function ReceiptCard({ receipt, onPress, onDelete }: ReceiptCardProps) {
     >
       {/* Thumbnail */}
       <Image
-        source={{ uri: receipt.image_uri }}
+        source={remoteImageSource(receipt.image_uri)}
         style={styles.thumbnail}
         contentFit="cover"
         transition={200}

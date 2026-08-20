@@ -26,6 +26,10 @@ create table if not exists receipts (
   synced_at         timestamptz default now()
 );
 
+-- Object path of the receipt photo in the receipt-images bucket (see below).
+-- Null means no photo reached storage — the row is still valid.
+alter table receipts add column if not exists image_path text;
+
 -- Newest-first listing is the app's only read pattern
 create index if not exists receipts_created_at_idx
   on receipts (created_at desc);
@@ -52,3 +56,29 @@ create policy "app reads" on receipts
 
 -- No delete policy on purpose: a leaked key must never be able to wipe
 -- records. Delete from the dashboard or with the service key.
+
+
+-- ── Receipt photos ─────────────────────────────────────────────────────────
+--
+-- Private bucket: receipt ids embed a timestamp, so a public object URL would
+-- be half guessable. The app reads photos with the anon key instead.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('receipt-images', 'receipt-images', false, 5242880)
+on conflict (id) do nothing;
+
+drop policy if exists "app uploads images" on storage.objects;
+create policy "app uploads images" on storage.objects
+  for insert to anon with check (bucket_id = 'receipt-images');
+
+-- Needed for x-upsert: re-uploading a receipt replaces its object
+drop policy if exists "app replaces images" on storage.objects;
+create policy "app replaces images" on storage.objects
+  for update to anon
+  using (bucket_id = 'receipt-images')
+  with check (bucket_id = 'receipt-images');
+
+drop policy if exists "app reads images" on storage.objects;
+create policy "app reads images" on storage.objects
+  for select to anon using (bucket_id = 'receipt-images');
+
+-- Again no delete policy: photos are the evidence behind an approved bill.

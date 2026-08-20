@@ -17,6 +17,7 @@ import { getReceiptById } from '@/services/storage';
 import { Receipt, ReceiptInput } from '@/types/receipt';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
+import { remoteImageSource } from '@/services/remote-db';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -215,7 +216,7 @@ export default function ReceiptDetailScreen() {
           <IconSymbol name="xmark" size={28} color="#fff" />
         </TouchableOpacity>
         <Image
-          source={{ uri: receipt.image_uri }}
+          source={remoteImageSource(receipt.image_uri)}
           style={styles.fullImage}
           contentFit="contain"
         />
@@ -255,7 +256,7 @@ export default function ReceiptDetailScreen() {
           activeOpacity={0.8}
         >
           <Image
-            source={{ uri: receipt.image_uri }}
+            source={remoteImageSource(receipt.image_uri)}
             style={styles.image}
             contentFit="cover"
             transition={200}

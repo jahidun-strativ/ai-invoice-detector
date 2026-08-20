@@ -194,8 +194,12 @@ export async function migrateToMonthlyExport(
  *
  * Ownership rule: a receipt scanned on THIS device is never overwritten — its
  * row keeps the local image path and any local edit. Rows that arrived from the
- * database (recognised by an empty image_uri) are refreshed, so a correction
- * made on the phone that owns a receipt reaches everyone else.
+ * database are refreshed, so a correction made on the phone that owns a receipt
+ * reaches everyone else.
+ *
+ * Locally scanned is recognised by a `file://` image_uri. Imported rows hold
+ * either a bucket URL or nothing, so an empty image_uri is not the test — a
+ * scan whose photo failed to upload would then be treated as someone else's.
  *
  * Returns how many rows were added or refreshed.
  */
@@ -212,7 +216,7 @@ export async function importRemoteReceipts(receipts: Receipt[]): Promise<number>
       [receipt.id],
     );
 
-    if (existing && existing.image_uri) {
+    if (existing?.image_uri.startsWith("file:")) {
       continue; // scanned here — this device owns it
     }
 
@@ -232,6 +236,7 @@ export async function importRemoteReceipts(receipts: Receipt[]): Promise<number>
       receipt.error_message,
       receipt.created_at,
       now,
+      receipt.image_uri,
       receipt.id,
     ];
 
@@ -241,7 +246,7 @@ export async function importRemoteReceipts(receipts: Receipt[]): Promise<number>
           merchant_name = ?, receipt_date = ?, receipt_number = ?, invoice_type = ?,
           items = ?, subtotal = ?, tax = ?, total = ?, currency = ?, payment_method = ?,
           confidence_score = ?, raw_text = ?, error_message = ?, created_at = ?,
-          synced_at = ?
+          synced_at = ?, image_uri = ?
         WHERE id = ?`,
         values,
       );
@@ -251,8 +256,8 @@ export async function importRemoteReceipts(receipts: Receipt[]): Promise<number>
           merchant_name, receipt_date, receipt_number, invoice_type,
           items, subtotal, tax, total, currency, payment_method,
           confidence_score, raw_text, error_message, created_at,
-          synced_at, id, image_uri
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
+          synced_at, image_uri, id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         values,
       );
     }

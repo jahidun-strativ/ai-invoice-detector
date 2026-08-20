@@ -4,14 +4,26 @@
  * an opaque 401/404 if they drift.
  */
 
+jest.mock('expo-image-manipulator', () => ({
+  SaveFormat: { JPEG: 'jpeg' },
+  manipulateAsync: jest.fn(async () => ({ uri: 'file:///resized.jpg' })),
+}));
+
+jest.mock('expo-file-system/legacy', () => ({
+  FileSystemUploadType: { BINARY_CONTENT: 1 },
+  uploadAsync: jest.fn(async () => ({ status: 200, body: '' })),
+}));
+
 import {
   batchSyncReceipts,
   fetchRemoteReceipts,
   fromRemoteRow,
+  imagePathFromUri,
   isMisconfigured,
   isRemoteConfigured,
   isSupabaseUrl,
   refreshRemoteConfig,
+  remoteImageSource,
   requiresKey,
   syncReceipt,
   testConnection,
@@ -405,6 +417,104 @@ describe('unsynced receipts are retried, not lost', () => {
 
     expect(total).toBeGreaterThan(before);
     expect((await getUnsyncedReceipts()).length).toBe(total);
+  });
+});
+
+describe('receipt photos in storage', () => {
+  const uploadAsync = require('expo-file-system/legacy').uploadAsync as jest.Mock;
+  const manipulateAsync = require('expo-image-manipulator').manipulateAsync as jest.Mock;
+
+  beforeEach(() => {
+    uploadAsync.mockReset();
+    uploadAsync.mockResolvedValue({ status: 200, body: '' });
+    manipulateAsync.mockReset();
+    manipulateAsync.mockResolvedValue({ uri: 'file:///resized.jpg' });
+  });
+
+  it('uploads the photo to the private bucket and records its path', async () => {
+    await configureSupabase();
+    await syncReceipt(receipt());
+
+    const [url, fileUri, options] = uploadAsync.mock.calls[0];
+    expect(url).toBe(`${PROJECT}/storage/v1/object/receipt-images/r1.jpg`);
+    // The resized copy, not the multi-megabyte camera frame
+    expect(fileUri).toBe('file:///resized.jpg');
+    expect(options.headers.apikey).toBe(KEY);
+    expect(options.headers['x-upsert']).toBe('true');
+
+    const row = JSON.parse(fetchMock.mock.calls[0][1].body)[0];
+    expect(row.image_path).toBe('r1.jpg');
+  });
+
+  it('shrinks the photo before upload so the free tier is not burned', async () => {
+    await configureSupabase();
+    await syncReceipt(receipt());
+
+    const [, actions, options] = manipulateAsync.mock.calls[0];
+    expect(actions[0].resize.width).toBeLessThanOrEqual(1600);
+    expect(options.compress).toBeLessThan(1);
+  });
+
+  it('still syncs the receipt when the photo will not upload', async () => {
+    await configureSupabase();
+    uploadAsync.mockResolvedValue({ status: 413, body: 'too large' });
+
+    const result = await batchSyncReceipts([receipt()]);
+
+    expect(result.syncedIds).toEqual(['r1']);
+    const row = JSON.parse(fetchMock.mock.calls[0][1].body)[0];
+    expect(row.image_path).toBeNull();
+  });
+
+  it('re-uploads nothing for a receipt pulled from another device', async () => {
+    await configureSupabase();
+    const remote = receipt({
+      image_uri: `${PROJECT}/storage/v1/object/receipt-images/r1.jpg`,
+    });
+
+    await syncReceipt(remote);
+
+    expect(uploadAsync).not.toHaveBeenCalled();
+    // The path must survive the upsert, or editing on this phone would blank
+    // the photo for everyone
+    const row = JSON.parse(fetchMock.mock.calls[0][1].body)[0];
+    expect(row.image_path).toBe('r1.jpg');
+  });
+
+  it('turns a stored path back into a viewable url', async () => {
+    await configureSupabase();
+    const mapped = fromRemoteRow({ id: 'r9', total: 10, image_path: 'r9.jpg' });
+    expect(mapped.image_uri).toBe(
+      `${PROJECT}/storage/v1/object/receipt-images/r9.jpg`,
+    );
+    expect(imagePathFromUri(mapped.image_uri)).toBe('r9.jpg');
+  });
+
+  it('attaches the key only to bucket urls, never to a local file', async () => {
+    await configureSupabase();
+
+    // A private bucket rejects an unauthenticated GET, so expo-image needs the key
+    const remote = remoteImageSource(
+      `${PROJECT}/storage/v1/object/receipt-images/r1.jpg`,
+    );
+    expect(remote?.headers?.apikey).toBe(KEY);
+
+    expect(remoteImageSource('file:///img.jpg')).toEqual({ uri: 'file:///img.jpg' });
+    expect(remoteImageSource('')).toBeUndefined();
+  });
+
+  it('keeps a local scan even when its photo never reached the bucket', async () => {
+    await configureSupabase();
+    // Scanned here, upload failed, so image_uri is a file path with no remote twin
+    const created = await createReceipt({ ...receipt(), image_uri: 'file:///mine.jpg' } as any);
+
+    const changed = await importRemoteReceipts([
+      { ...receipt({ merchant_name: 'Overwritten' }), id: created.id },
+    ]);
+
+    expect(changed).toBe(0);
+    const stored = await getReceipts();
+    expect(stored.find((r) => r.id === created.id)?.merchant_name).toBe('Shwapno');
   });
 });
 

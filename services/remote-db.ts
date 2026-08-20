@@ -53,13 +53,47 @@
  *     for select to anon using (true);
  *
  * No delete policy on purpose: a leaked key must not be able to wipe records.
+ *
+ * ── Receipt photos (Supabase Storage) ──────────────────────────────────────
+ *
+ * The photo is uploaded alongside the row so a receipt scanned on one phone is
+ * viewable on every other phone, and the office keeps the evidence if a device
+ * is lost. The bucket is **private**: receipt ids embed a timestamp, so public
+ * object URLs would be half guessable. Reads go through the anon key instead,
+ * which the app already holds.
+ *
+ *   insert into storage.buckets (id, name, public)
+ *   values ('receipt-images', 'receipt-images', false)
+ *   on conflict (id) do nothing;
+ *
+ *   create policy "app uploads images" on storage.objects
+ *     for insert to anon with check (bucket_id = 'receipt-images');
+ *   create policy "app replaces images" on storage.objects
+ *     for update to anon using (bucket_id = 'receipt-images')
+ *     with check (bucket_id = 'receipt-images');
+ *   create policy "app reads images" on storage.objects
+ *     for select to anon using (bucket_id = 'receipt-images');
+ *
+ *   alter table receipts add column if not exists image_path text;
  */
 
 import { Receipt } from "@/types/receipt";
+import * as FileSystem from "expo-file-system/legacy";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { getAppConfig } from "./storage";
 
 const TIMEOUT_MS = 15000;
 const SUPABASE_TABLE = "receipts";
+const IMAGE_BUCKET = "receipt-images";
+
+/**
+ * Upload size, not OCR size. The AI already read the receipt at full detail;
+ * what is stored is a legible copy for a human checking a bill later. 1600px
+ * at 0.7 lands around 200–350 KB, so Supabase's 1 GB free tier holds a few
+ * thousand receipts instead of a few hundred full-res camera frames.
+ */
+const IMAGE_MAX_DIMENSION = 1600;
+const IMAGE_QUALITY = 0.7;
 
 let cachedUrl: string | null = null;
 let cachedKey: string | null = null;
@@ -139,10 +173,15 @@ export function requiresKey(url: string): boolean {
  * Postgres' `date` type accepts them, and the office name rides along so one
  * project can serve several offices.
  */
-export function toRemoteRow(receipt: Receipt, officeName: string) {
+export function toRemoteRow(
+  receipt: Receipt,
+  officeName: string,
+  imagePath?: string | null,
+) {
   return {
     id: receipt.id,
     office_name: officeName,
+    image_path: imagePath ?? null,
     merchant_name: receipt.merchant_name,
     receipt_date: receipt.receipt_date || null,
     receipt_number: receipt.receipt_number,
@@ -162,6 +201,112 @@ export function toRemoteRow(receipt: Receipt, officeName: string) {
 
 function supabaseEndpoint(url: string): string {
   return `${url.replace(/\/+$/, "")}/rest/v1/${SUPABASE_TABLE}`;
+}
+
+function storageEndpoint(url: string, path: string): string {
+  return `${url.replace(/\/+$/, "")}/storage/v1/object/${IMAGE_BUCKET}/${path}`;
+}
+
+/**
+ * Headers an image request needs. The bucket is private, so `expo-image` has to
+ * present the anon key — see `remoteImageSource`.
+ */
+export function imageAuthHeaders(): Record<string, string> | undefined {
+  // Read the env directly rather than `cachedKey`: a card can render before
+  // refreshRemoteConfig() has run, and an unauthenticated GET on a private
+  // bucket comes back 400 with no way to retry.
+  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || cachedKey;
+  return key ? { apikey: key, Authorization: `Bearer ${key}` } : undefined;
+}
+
+/**
+ * Build an `<Image source>` for a receipt photo. A local `file://` path needs
+ * nothing; a photo living in the bucket needs the key attached.
+ */
+export function remoteImageSource(uri: string) {
+  if (!uri) return undefined;
+  return uri.startsWith("http")
+    ? { uri, headers: imageAuthHeaders() }
+    : { uri };
+}
+
+/** Recover the object path from a URL this app built, so a re-sync keeps it */
+export function imagePathFromUri(uri: string): string | null {
+  const marker = `/object/${IMAGE_BUCKET}/`;
+  const at = uri.indexOf(marker);
+  return at === -1 ? null : uri.slice(at + marker.length) || null;
+}
+
+/**
+ * Put the receipt photo in the bucket and return its object path.
+ *
+ * Returns null when there is nothing to upload (no image, or no Supabase) and
+ * throws when an upload was attempted and failed — the caller decides whether
+ * a missing photo should hold up the row.
+ */
+export async function uploadReceiptImage(
+  receipt: Receipt,
+): Promise<string | null> {
+  if (!receipt.image_uri) return null;
+  // Already in the bucket (this row came from another device) — keep its path
+  if (!receipt.image_uri.startsWith("file:")) {
+    return imagePathFromUri(receipt.image_uri);
+  }
+  if (!cachedUrl || !isSupabaseUrl(cachedUrl) || !cachedKey) return null;
+
+  const { uri } = await manipulateAsync(
+    receipt.image_uri,
+    [{ resize: { width: IMAGE_MAX_DIMENSION } }],
+    { compress: IMAGE_QUALITY, format: SaveFormat.JPEG },
+  );
+
+  const path = `${receipt.id}.jpg`;
+  const result = await FileSystem.uploadAsync(
+    storageEndpoint(cachedUrl, path),
+    uri,
+    {
+      httpMethod: "POST",
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: {
+        apikey: cachedKey,
+        Authorization: `Bearer ${cachedKey}`,
+        "Content-Type": "image/jpeg",
+        // Re-uploading the same receipt replaces the object instead of 409ing
+        "x-upsert": "true",
+      },
+    },
+  );
+
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error(
+      `Image upload failed (${result.status})${result.body ? `: ${result.body.slice(0, 120)}` : ""}`,
+    );
+  }
+  return path;
+}
+
+/**
+ * Upload photos for a batch, tolerating failures.
+ *
+ * A photo that will not upload must not strand the receipt itself: the amounts
+ * are what the monthly sheet needs, and a resize can fail on a file the user
+ * has since deleted from the gallery. The row syncs with no photo and Settings
+ * → Re-upload all receipts retries it.
+ *
+ * ponytail: retry is manual. Add a per-row `image_synced_at` if photos start
+ * going missing often enough that someone notices.
+ */
+async function uploadImages(receipts: Receipt[]): Promise<Map<string, string>> {
+  const paths = new Map<string, string>();
+  for (const receipt of receipts) {
+    try {
+      const path = await uploadReceiptImage(receipt);
+      if (path) paths.set(receipt.id, path);
+    } catch (error) {
+      console.warn(`Photo for ${receipt.id} not uploaded:`, error);
+    }
+  }
+  return paths;
 }
 
 async function request(
@@ -225,11 +370,16 @@ export async function testConnection(
 async function send(rows: Receipt[]): Promise<void> {
   if (!cachedUrl) return;
 
+  // Photos first: the row carries the object path, so it has to exist by then
+  const imagePaths = isSupabaseUrl(cachedUrl)
+    ? await uploadImages(rows)
+    : new Map<string, string>();
+
   const response = isSupabaseUrl(cachedUrl)
     ? await postToSupabase(
         cachedUrl,
         cachedKey ?? "",
-        rows.map((r) => toRemoteRow(r, cachedOffice)),
+        rows.map((r) => toRemoteRow(r, cachedOffice, imagePaths.get(r.id))),
       )
     : await request(
         cachedUrl,
@@ -252,8 +402,8 @@ async function send(rows: Receipt[]): Promise<void> {
  * on every other phone. Supabase only — a generic endpoint has no agreed read
  * shape.
  *
- * Rows carry no image: photos stay on the device that took them, so
- * `image_uri` comes back empty and the UI falls back to a blank thumbnail.
+ * Photos come back as bucket URLs, not local files, so they load over the
+ * network on demand rather than being copied onto every phone.
  */
 export async function fetchRemoteReceipts(limit: number = 2000): Promise<Receipt[]> {
   if (!cachedUrl || !isSupabaseUrl(cachedUrl) || !cachedKey) return [];
@@ -298,8 +448,12 @@ export function fromRemoteRow(row: any): Receipt {
     currency: row.currency ?? "BDT",
     payment_method: row.payment_method ?? null,
     confidence_score: Number(row.confidence_score) || 0,
-    // The photo never left the device that scanned it
-    image_uri: "",
+    // Photos live in the bucket, so another device's scan is viewable here.
+    // A row with no path (older scan, or an upload that failed) has no photo.
+    image_uri:
+      row.image_path && cachedUrl
+        ? storageEndpoint(cachedUrl, String(row.image_path))
+        : "",
     raw_text: row.raw_text ?? null,
     error_message: row.error_message ?? null,
     created_at: row.created_at ?? new Date().toISOString(),
