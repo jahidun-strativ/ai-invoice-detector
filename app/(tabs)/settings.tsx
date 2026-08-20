@@ -72,6 +72,10 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
+    // load() awaits before it setStates, so this is a fetch-on-mount, not a
+    // cascading render. The rule (new in eslint-config-expo 57) cannot see
+    // through the async call.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 

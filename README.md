@@ -87,7 +87,7 @@ npm run development-builds
 
 ## Technologies
 
-Expo SDK 54 / React Native · Expo Router · expo-sqlite · OpenRouter (Gemini 2.5 Flash) · expo-camera / expo-image-picker · expo-updates (OTA)
+Expo SDK 57 / React Native 0.86 · Expo Router · expo-sqlite · OpenRouter (Gemini 2.5 Flash) · expo-camera / expo-image-picker · expo-updates (OTA)
 
 ## License
 

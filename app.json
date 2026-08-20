@@ -2,13 +2,15 @@
   "expo": {
     "name": "AI Receipt Scanner",
     "slug": "ai-invoice-extractor",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ai-invoice-extractor",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "platforms": ["android", "ios"],
+    "platforms": [
+      "android",
+      "ios"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.jahidun13.aiinvoiceextractor",
@@ -25,7 +27,6 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.jahidun13.aiinvoiceextractor",
       "permissions": [
@@ -91,7 +92,7 @@
       "url": "https://u.expo.dev/c9541f72-5140-40fc-8ba9-a249aebcd9e4"
     },
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "fingerprint"
     }
   }
 }

@@ -86,9 +86,9 @@ async function testMigration() {
   }
 }
 
-// Only run if this is the main module
-if (require.main === module) {
-  testMigration().catch(console.error);
-}
+// Run on load — this file is only ever executed directly, and the
+// `require.main === module` guard it used to carry needs @types/node, which
+// would drag Node's globals into the app's typecheck.
+testMigration().catch(console.error);
 
 export { testMigration };

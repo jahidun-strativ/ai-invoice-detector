@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-AI Receipt Scanner — an Expo SDK 54 / React Native app that photographs receipts, extracts structured data with Google Gemini 2.5 Flash via OpenRouter, stores it in local SQLite, and exports a monthly XLSX "Bill Approval Sheet" (plus ad-hoc JSON). Tuned for English + Bengali/Bangla receipts including handwriting. Uses pnpm. Tests: `pnpm test` (jest-expo; `expo-sqlite` is mocked onto `node:sqlite` so storage tests run real SQL).
+AI Receipt Scanner — an Expo SDK 57 / React Native app that photographs receipts, extracts structured data with Google Gemini 2.5 Flash via OpenRouter, stores it in local SQLite, and exports a monthly XLSX "Bill Approval Sheet" (plus ad-hoc JSON). Tuned for English + Bengali/Bangla receipts including handwriting. Uses pnpm. Tests: `pnpm test` (jest-expo; `expo-sqlite` is mocked onto `node:sqlite` so storage tests run real SQL).
 
 The office workflow is monthly and local-first: staff scan receipts all month with no network dependency, then export one signed-off sheet per month. There is deliberately **no Google Sheets integration** — writing to an org sheet needs OAuth the app never had; see `.kiro/specs/monthly-receipt-export/`.
 

@@ -69,7 +69,7 @@ function receipt(overrides: Partial<Receipt> = {}): Receipt {
 }
 
 const fetchMock = jest.fn();
-global.fetch = fetchMock as any;
+globalThis.fetch = fetchMock as any;
 
 function ok(status = 201) {
   return { ok: status < 400, status, text: async () => '' };

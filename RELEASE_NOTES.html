@@ -9,7 +9,9 @@
 <hr style="border: none; border-top: 2pt solid #FE5001; margin-bottom: 20pt;">
 
 <h2 style="font-size: 15pt; color: #FE5001; margin: 0 0 2pt 0;">20 August 2026</h2>
-<p style="font-size: 9.5pt; color: #4C434E; margin: 0 0 12pt 0;">App version 1.0.0 &middot; Android &middot; Update channel: main</p>
+<p style="font-size: 9.5pt; color: #4C434E; margin: 0 0 12pt 0;">App version 1.1.0 &middot; Android &middot; Update channel: main</p>
+
+<p style="margin: 0 0 12pt 0;"><b>This release is installed, not updated in place.</b> Everyone needs to install the new app file once; automatic updates resume afterwards.</p>
 
 <h3 style="font-size: 12pt; color: #1A0E1C; margin: 16pt 0 6pt 0;">New Features</h3>
 <ul>
@@ -22,6 +24,10 @@
 <li>Each photo is resized before upload, keeping a receipt around 250&nbsp;KB instead of a 2&ndash;4&nbsp;MB camera frame, so the free storage tier holds thousands of receipts rather than a few hundred.</li>
 <li>A photo that fails to upload never holds back the receipt itself; the record still reaches the database and Settings &rarr; Re-upload all receipts sends the photo later.</li>
 <li>Requires the updated <i>supabase/schema.sql</i> (adds the <i>image_path</i> column and the storage bucket) to be applied before the app update is published.</li>
+<li>Upgraded to Expo SDK 57 and React Native 0.86.2, from SDK 54 and React Native 0.81.5 &mdash; three SDK generations, thirty package versions. React Native 0.87 exists but no Expo release supports it yet.</li>
+<li>React Navigation is now provided by Expo Router and is no longer a direct dependency; keeping both produced two conflicting sets of types.</li>
+<li>Update targeting now derives from the app&rsquo;s native build rather than its version number, so an update built for one generation of the app can no longer be delivered to another and crash it.</li>
+<li>App file numbers now increment automatically for internal releases, so two different builds can no longer report the same number.</li>
 <li>Test suite now at 96 tests.</li>
 </ul>
 

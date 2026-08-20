@@ -2,6 +2,9 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // TypeScript 6 (SDK 57) no longer pulls in every @types/* package
+    // automatically, so the jest globals have to be named explicitly.
+    "types": ["jest"],
     "paths": {
       "@/*": [
         "./*"

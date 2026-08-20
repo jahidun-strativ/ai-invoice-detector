@@ -14,8 +14,8 @@
   <div class="rule"></div>
   <p class="meta">
     <b>Audience</b> &nbsp;Operations, IT and technical handover<br>
-    <b>System</b> &nbsp;Android application, internal distribution, Expo SDK 54<br>
-    <b>App version</b> &nbsp;1.0.0 &middot; Update channel <code>main</code><br>
+    <b>System</b> &nbsp;Android application, internal distribution, Expo SDK 57<br>
+    <b>App version</b> &nbsp;1.1.0 &middot; Update channel <code>main</code><br>
     <b>Document date</b> &nbsp;20 August 2026<br>
     <b>Source</b> &nbsp;<span class="filepath">docs/system-documentation.html</span> — edit the HTML, regenerate the PDF
   </p>
@@ -335,10 +335,22 @@ eas build --platform android --profile preview</code></pre>
   completely, for every device, until the SQL is run.
 </div>
 
-<p>An OTA update only reaches builds with a matching runtime version. The policy
-is <code>appVersion</code>, so bumping <code>version</code> in app.json cuts off
-existing installs from further updates until they are rebuilt and reinstalled.
-Exact procedures: MAINTENANCE.md §1 and §2.</p>
+<p>An OTA update only reaches builds with a matching <b>runtime version</b>, and
+the policy is <code>fingerprint</code> — the runtime version is derived from the
+app's native dependencies rather than its version number. An update is therefore
+only ever offered to builds with the same native shell, and a rebuild is required
+whenever those dependencies change. Exact procedures: MAINTENANCE.md §1 and §2.</p>
+
+<div class="warn">
+  <span class="label">Why the policy is not appVersion</span>
+  It was, until the SDK 57 upgrade. Under <code>appVersion</code> the runtime
+  version is the version string, so an SDK 54 build and an SDK 57 build both
+  claimed <code>1.0.0</code> and sat on channel <code>main</code> together — one
+  OTA would have been served to both populations, and a bundle built against
+  React Native 0.86 crashes on launch inside an 0.81 shell. Nothing warned about
+  it; the versions simply matched. <code>fingerprint</code> makes that
+  combination impossible rather than merely discouraged.
+</div>
 
 <h2 class="section">9. Operations</h2>
 

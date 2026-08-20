@@ -14,7 +14,7 @@
   <div class="rule"></div>
   <p class="meta">
     <b>Audience</b> &nbsp;Developers joining or maintaining the codebase<br>
-    <b>App version</b> &nbsp;1.0.0 &middot; Expo SDK 54 &middot; React Native 0.81.5<br>
+    <b>App version</b> &nbsp;1.1.0 &middot; Expo SDK 57 &middot; React Native 0.86.2<br>
     <b>Platform</b> &nbsp;Android (internal distribution; iOS builds configured but out of scope)<br>
     <b>Document date</b> &nbsp;20 August 2026<br>
     <b>Source</b> &nbsp;<span class="filepath">docs/developer-guide.html</span> — edit the HTML, regenerate the PDF
@@ -333,6 +333,22 @@ in app.json. Web is not a target.</p>
 <span class="filepath">pnpm-workspace.yaml</span>:</p>
 <pre><code>allowBuilds:
   unrs-resolver: true</code></pre>
+
+<h4>Do not add @react-navigation/* as a dependency</h4>
+<p>SDK 57 inlines React Navigation into expo-router, and the official template
+ships no <code>@react-navigation</code> dependency at all. Installing the npm copy
+alongside it produces two incompatible sets of types — its <code>pressColor</code>
+is <code>string</code>, expo-router's is <code>ColorValue</code> — and
+<code>tabBarButton</code> stops type-checking. <code>ThemeProvider</code>,
+<code>DarkTheme</code> and <code>DefaultTheme</code> come from
+<code>expo-router</code>; <code>PlatformPressable</code> and
+<code>BottomTabBarButtonProps</code> are only reachable through its build paths.</p>
+
+<h4>tsconfig has to name its @types explicitly</h4>
+<p>TypeScript 6 stopped auto-including every <code>@types/*</code> package, so
+without <code>"types": ["jest"]</code> in tsconfig the three test suites produce
+around 330 "Cannot find name 'describe'" errors. The tests themselves still run —
+only the typecheck breaks, which makes it easy to misread as a broken upgrade.</p>
 
 <h4>The ownership rule is not "empty image_uri"</h4>
 <p>It used to be, before photos synced. Now imported rows hold a bucket URL, so

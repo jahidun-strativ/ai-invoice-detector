@@ -32,7 +32,8 @@
       },
       "ios": {
         "image": "latest"
-      }
+      },
+      "autoIncrement": true
     },
     "production": {
       "channel": "production",
