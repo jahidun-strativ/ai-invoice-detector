@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI Receipt Scanner — System Documentation</title>
+<link rel="stylesheet" href="doc.css">
+</head>
+<body>
+
+<div class="cover">
+  <p class="wordmark">STRATIV</p>
+  <h1>AI Receipt Scanner</h1>
+  <p class="subtitle">System Documentation</p>
+  <div class="rule"></div>
+  <p class="meta">
+    <b>Audience</b> &nbsp;Operations, IT and technical handover<br>
+    <b>System</b> &nbsp;Android application, internal distribution, Expo SDK 54<br>
+    <b>App version</b> &nbsp;1.0.0 &middot; Update channel <code>main</code><br>
+    <b>Document date</b> &nbsp;20 August 2026<br>
+    <b>Source</b> &nbsp;<span class="filepath">docs/system-documentation.html</span> — edit the HTML, regenerate the PDF
+  </p>
+</div>
+
+<h2>1. System overview</h2>
+
+<p>AI Receipt Scanner digitises paper expense receipts for a Strativ office. It
+runs entirely on staff phones, calls one external AI service to read each
+receipt, optionally mirrors the results to a shared database so the team sees one
+another's scans, and produces a monthly Excel <b>Bill Approval Sheet</b> for
+sign-off.</p>
+
+<p>It is not a server-side system. There is no backend to operate, no cron, no
+queue, and no admin panel. The operational surface is: the app on each phone, one
+AI vendor account, and one Supabase project.</p>
+
+<pre>   +-------------------------------------------+
+   |  Android phone (one per staff member)     |
+   |                                           |
+   |   Camera --> quality gate --> AI client   |
+   |                    |                      |
+   |                    v                      |
+   |              SQLite (source of truth)     |
+   |                    |                      |
+   |         +----------+----------+           |
+   |         |                     |           |
+   |    XLSX export           sync client      |
+   +---------|---------------------|-----------+
+             |                     |
+             v                     v
+     Share sheet / email    +---------------------------+
+     (manual delivery)      |  Supabase project         |
+                            |   receipts  (Postgres)    |
+                            |   receipt-images (Storage)|
+                            +---------------------------+
+                                       ^
+                                       |
+                             other phones push / pull
+
+     AI:  phone  --HTTPS-->  OpenRouter  -->  Gemini 2.5 Flash</pre>
+
+<h3>Design principles</h3>
+
+<table>
+  <thead><tr><th>Principle</th><th>Consequence</th></tr></thead>
+  <tbody>
+    <tr><td>Local-first</td><td>SQLite is authoritative. The app is fully usable with no connectivity except during the AI call itself.</td></tr>
+    <tr><td>Failure must not cost data</td><td>Sync is fire-and-forget and retried. A sync failure is never presented as a failed scan.</td></tr>
+    <tr><td>Additive sync only</td><td>The pull adds and refreshes; it never deletes local rows. There is no delete permission on the remote at all.</td></tr>
+    <tr><td>Monthly deliverable</td><td>The output is one signed document per month, not a live feed.</td></tr>
+  </tbody>
+</table>
+
+<h2 class="section">2. Components</h2>
+
+<table>
+  <thead><tr><th>Component</th><th>Responsibility</th><th>Failure behaviour</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Quality gate<br><span class="filepath">utils/image-quality.ts</span></td>
+      <td>Rejects blurry, dark or non-receipt photos on-device before any API call. Runs on a 160&nbsp;px thumbnail.</td>
+      <td>If it cannot analyse the image it passes the photo through rather than blocking the user. Staff can always override.</td>
+    </tr>
+    <tr>
+      <td>AI client<br><span class="filepath">services/ai-vision.ts</span></td>
+      <td>Sends the compressed image to OpenRouter, receives structured JSON, normalises it.</td>
+      <td>Never throws. Returns an error object the capture screen renders. Retries with backoff; aborts immediately on 401/402.</td>
+    </tr>
+    <tr>
+      <td>Local store<br><span class="filepath">services/storage.ts</span></td>
+      <td>SQLite: receipts, config, export columns. Statistics and month queries.</td>
+      <td>Retries a stale connection (a known Android <code>execAsync</code> null-pointer condition) by reopening the database.</td>
+    </tr>
+    <tr>
+      <td>Sync client<br><span class="filepath">services/remote-db.ts</span></td>
+      <td>Pushes rows and photos to Supabase, pulls the office's rows back.</td>
+      <td>Silent and non-fatal. Unsent receipts stay marked pending and go on the next app launch.</td>
+    </tr>
+    <tr>
+      <td>Sheet generator<br><span class="filepath">services/xlsx-export.ts</span></td>
+      <td>Builds the Bill Approval Sheet from a month's receipts and the column config.</td>
+      <td>Purely local and deterministic. No network dependency.</td>
+    </tr>
+    <tr>
+      <td>OTA client<br><span class="filepath">hooks/use-ota-updates.ts</span></td>
+      <td>Checks for a JavaScript update 3&nbsp;s after launch; manual check in Settings.</td>
+      <td>Silent on failure; the installed bundle keeps running. Disabled in dev builds.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 class="section">3. Data model</h2>
+
+<h3>On device — SQLite</h3>
+
+<p>Database <code>receipts.db</code>, three tables.</p>
+
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>TEXT PK</td><td><code>receipt_&lt;timestamp&gt;_&lt;random&gt;</code>. Generated on device; also the remote primary key.</td></tr>
+    <tr><td><code>merchant_name</code></td><td>TEXT</td><td>Nullable. May hold Bangla text.</td></tr>
+    <tr><td><code>receipt_date</code></td><td>TEXT</td><td>ISO <code>YYYY-MM-DD</code>, or null when unreadable.</td></tr>
+    <tr><td><code>receipt_number</code></td><td>TEXT</td><td>Nullable.</td></tr>
+    <tr><td><code>invoice_type</code></td><td>TEXT</td><td>retail, restaurant, utility, service, unknown.</td></tr>
+    <tr><td><code>items</code></td><td>TEXT</td><td>JSON array of line items.</td></tr>
+    <tr><td><code>subtotal</code>, <code>tax</code></td><td>REAL</td><td>Nullable.</td></tr>
+    <tr><td><code>total</code></td><td>REAL NOT NULL</td><td>Required — a receipt with no total is not accepted.</td></tr>
+    <tr><td><code>currency</code></td><td>TEXT</td><td>Defaults to BDT.</td></tr>
+    <tr><td><code>payment_method</code></td><td>TEXT</td><td>Nullable.</td></tr>
+    <tr><td><code>confidence_score</code></td><td>REAL</td><td>0&ndash;1, recalibrated against field completeness and arithmetic consistency.</td></tr>
+    <tr><td><code>image_uri</code></td><td>TEXT NOT NULL</td><td><code>file://</code> = scanned on this device. An <code>https://</code> bucket URL = pulled from the database. Empty = pulled, photo unavailable.</td></tr>
+    <tr><td><code>raw_text</code>, <code>error_message</code></td><td>TEXT</td><td>Diagnostics.</td></tr>
+    <tr><td><code>created_at</code></td><td>TEXT NOT NULL</td><td>ISO timestamp.</td></tr>
+    <tr><td><code>synced_at</code></td><td>TEXT</td><td><b>Null means not yet in the shared database.</b> This single column drives all offline catch-up.</td></tr>
+  </tbody>
+</table>
+
+<p><code>config</code> stores key/value settings (office name, optional endpoint).
+<code>export_columns</code> stores which sheet columns are enabled and in what
+order. Indexes exist on <code>created_at</code>, <code>invoice_type</code>,
+<code>merchant_name</code> and <code>substr(receipt_date,1,7)</code> for month
+queries.</p>
+
+<div class="note">
+  <span class="label">Why receipt_date can be null</span>
+  Handwritten receipts sometimes have no legible date. Month queries use
+  <code>COALESCE</code> so those receipts appear in the month they were
+  <i>scanned</i> rather than falling out of every month's sheet — which is what
+  happened before, and meant expenses silently disappeared.
+</div>
+
+<h3>Shared — Supabase</h3>
+
+<p>Defined and re-runnable in <span class="filepath">supabase/schema.sql</span>.</p>
+
+<table>
+  <thead><tr><th>Object</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>receipts</code> table</td><td>Mirrors the device columns, plus <code>office_name</code> (one project can serve several offices) and <code>image_path</code> (object path of the photo). Upserted on <code>id</code>.</td></tr>
+    <tr><td><code>receipt-images</code> bucket</td><td>Private. One object per receipt, <code>&lt;receipt id&gt;.jpg</code>, 5&nbsp;MB per-file limit.</td></tr>
+  </tbody>
+</table>
+
+<p><b>Row-level security</b> is enabled and the app holds the anon role only:</p>
+
+<table>
+  <thead><tr><th>Operation</th><th>receipts table</th><th>receipt-images bucket</th></tr></thead>
+  <tbody>
+    <tr><td>insert</td><td>Allowed</td><td>Allowed</td></tr>
+    <tr><td>update</td><td>Allowed (needed for upsert)</td><td>Allowed (needed for replace-on-reupload)</td></tr>
+    <tr><td>select</td><td>Allowed — this is what makes the team view work</td><td>Allowed</td></tr>
+    <tr><td>delete</td><td><b>No policy</b></td><td><b>No policy</b></td></tr>
+  </tbody>
+</table>
+
+<p>The missing delete policy is the single most important line in the schema: a
+leaked key cannot erase the office's expense records. Deletion requires the
+Supabase dashboard or the service key, neither of which is on any phone.</p>
+
+<h2 class="section">4. Synchronisation</h2>
+
+<h3>Push</h3>
+
+<ol>
+  <li>A receipt is saved locally with <code>synced_at</code> null.</li>
+  <li>The photo is resized (1600&nbsp;px, quality 0.7) and uploaded to the bucket; the returned object path goes on the row.</li>
+  <li>The row is upserted on <code>id</code> with <code>resolution=merge-duplicates</code>, so re-sending never duplicates.</li>
+  <li>Only ids the endpoint actually accepted get <code>synced_at</code> stamped. Everything else is retried on the next launch.</li>
+</ol>
+
+<p>Editing a receipt clears <code>synced_at</code>, so corrections propagate.
+A photo that fails to upload does not hold back its row — the record syncs with
+no photo, and Settings &rarr; Data &rarr; Re-upload all receipts sends it later.</p>
+
+<h3>Pull</h3>
+
+<p>On app start the device fetches the office's receipts (newest first, 2000-row
+limit) and merges them. The <b>ownership rule</b> decides each row:</p>
+
+<table>
+  <thead><tr><th>Local state</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>Row absent</td><td>Insert it. Another phone's scan appears here.</td></tr>
+    <tr><td>Row present, <code>image_uri</code> starts <code>file://</code></td><td><b>Skip.</b> This device scanned it and owns it.</td></tr>
+    <tr><td>Row present, came from the database</td><td>Refresh it, so a correction made on the owning phone arrives.</td></tr>
+  </tbody>
+</table>
+
+<div class="warn">
+  <span class="label">Never delete local rows to match the remote</span>
+  An empty read is indistinguishable from a blocked, rate-limited or failed one.
+  "The table looks empty, so clear the phone" would destroy the office's records,
+  including scans that had not uploaded yet. If the remote table is emptied by
+  accident, recover the other direction: Settings &rarr; Data &rarr; Re-upload
+  all receipts clears <code>synced_at</code> and pushes everything back.
+</div>
+
+<h3>Consequences to be aware of</h3>
+
+<ul>
+  <li>Sync is <b>eventual</b>. Two phones agree after both have opened the app with a connection, not immediately.</li>
+  <li>There is <b>no conflict resolution</b>. If the same receipt is edited on two phones, the last push wins. In practice one person owns a receipt, so this has not occurred.</li>
+  <li>Photos load over the network on the phones that did not take them, so the History list on those devices needs a connection to show thumbnails.</li>
+  <li>Running <b>without</b> Supabase configured is fully supported. The app is then single-device and every sheet covers one phone's scans.</li>
+</ul>
+
+<h2 class="section">5. External dependencies</h2>
+
+<table>
+  <thead><tr><th>Service</th><th>Used for</th><th>If unavailable</th><th>Cost model</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>OpenRouter &rarr; Gemini 2.5 Flash</td>
+      <td>Reading each receipt</td>
+      <td>Scanning stops working. Everything else — history, editing, export — continues. This is the only hard external dependency.</td>
+      <td>Per request. Use a spend-capped key.</td>
+    </tr>
+    <tr>
+      <td>Supabase (Postgres + Storage)</td>
+      <td>Shared team view, photo backup</td>
+      <td>Degrades to single-device. Scans queue locally and upload later. No data loss.</td>
+      <td>Free tier is sufficient at current volume; see §9.</td>
+    </tr>
+    <tr>
+      <td>EAS (Expo Application Services)</td>
+      <td>Builds and OTA updates</td>
+      <td>No effect on installed apps. Only blocks shipping changes.</td>
+      <td>Expo plan.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 class="section">6. Security model</h2>
+
+<h3>What is exposed</h3>
+
+<p>Every <code>EXPO_PUBLIC_*</code> value is compiled into the JavaScript bundle.
+Anyone who obtains the APK can extract the OpenRouter key and the Supabase anon
+key. This is inherent to a client-only app with no login, and is accepted for
+internal distribution. The mitigations are structural rather than secret-based:</p>
+
+<table>
+  <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td>Extracted OpenRouter key used to spend money</td><td>Spend cap on the key. Rotate via MAINTENANCE.md §3 — a rotation is an OTA update, not a rebuild.</td></tr>
+    <tr><td>Extracted anon key used to read expense data</td><td>Accepted. The data is internal merchant names, dates and amounts. Add Supabase Auth if that changes.</td></tr>
+    <tr><td>Extracted anon key used to destroy data</td><td><b>Not possible.</b> No delete policy exists on the table or the bucket.</td></tr>
+    <tr><td>Receipt photos read by an outsider</td><td>The bucket is private; reads require the key. Public URLs were rejected because receipt ids embed a timestamp and would be partly guessable.</td></tr>
+    <tr><td>Lost or stolen phone</td><td>Receipts already synced are safe in the shared database. Unsynced scans on that device are lost. There is no remote wipe.</td></tr>
+  </tbody>
+</table>
+
+<h3>Data handling</h3>
+
+<ul>
+  <li>Receipt images are sent to OpenRouter for extraction. Treat that as processing by a third party when assessing what may be photographed.</li>
+  <li>Photos are stored twice: on the capturing device and in the private bucket.</li>
+  <li>The app collects no personal data about its users — no accounts, no analytics, no tracking.</li>
+  <li>Android permissions requested: camera, and read/write external storage for importing and sharing files.</li>
+</ul>
+
+<h2 class="section">7. Environments and configuration</h2>
+
+<table>
+  <thead><tr><th>Variable</th><th>Where it is set</th><th>Effect if missing</th></tr></thead>
+  <tbody>
+    <tr><td><code>EXPO_PUBLIC_OPENROUTER_API_KEY</code></td><td><code>.env</code> locally; EAS environment variable for builds</td><td>Every scan fails.</td></tr>
+    <tr><td><code>EXPO_PUBLIC_SUPABASE_URL</code></td><td>Same</td><td>App runs local-only; no team view.</td></tr>
+    <tr><td><code>EXPO_PUBLIC_SUPABASE_ANON_KEY</code></td><td>Same</td><td>If the URL is set but the key is not, every sync is rejected. The app logs a warning at start.</td></tr>
+  </tbody>
+</table>
+
+<p>The database endpoint is <b>build configuration, not a user setting</b>. There
+is deliberately no field, status indicator or sync button in the app: a phone is
+pointed at the office project by installing the build, and nothing else. Staff
+have no reason to see a database URL, and every extra field is another way to
+break sync.</p>
+
+<h3>Profiles and channels</h3>
+
+<table>
+  <thead><tr><th>EAS profile</th><th>Channel</th><th>Environment</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td><code>development</code></td><td>development</td><td>development</td><td>Dev client for local work.</td></tr>
+    <tr><td><code>preview</code></td><td><b>main</b></td><td>preview</td><td><b>The build staff install.</b> Internal distribution.</td></tr>
+    <tr><td><code>production</code></td><td>production</td><td>production</td><td>Store-oriented profile. Unused — this app is not published.</td></tr>
+  </tbody>
+</table>
+
+<h2 class="section">8. Build, release and update</h2>
+
+<h3>Which mechanism applies</h3>
+
+<table>
+  <thead><tr><th>Change</th><th>Mechanism</th></tr></thead>
+  <tbody>
+    <tr><td>JavaScript, TypeScript, styling, prompt, sheet layout</td><td>OTA update. Reaches phones on next launch.</td></tr>
+    <tr><td>API key rotation</td><td>OTA update (the key is read from the bundle).</td></tr>
+    <tr><td>New native module or config plugin, app.json native change, SDK upgrade</td><td>New build. Each phone reinstalls the APK.</td></tr>
+    <tr><td>Database column</td><td>SQL first, then OTA. See the warning below.</td></tr>
+  </tbody>
+</table>
+
+<pre><code># Ship a JavaScript change to the phones staff use
+eas update --channel main --environment preview -p android -m "what changed"
+
+# Build a new APK when native code changed
+eas build --platform android --profile preview</code></pre>
+
+<div class="warn">
+  <span class="label">Order matters for schema changes</span>
+  Apply <span class="filepath">supabase/schema.sql</span> <b>before</b> publishing
+  an update that references a new column. PostgREST rejects a payload naming an
+  unknown column, so the wrong order does not degrade sync — it stops it
+  completely, for every device, until the SQL is run.
+</div>
+
+<p>An OTA update only reaches builds with a matching runtime version. The policy
+is <code>appVersion</code>, so bumping <code>version</code> in app.json cuts off
+existing installs from further updates until they are rebuilt and reinstalled.
+Exact procedures: MAINTENANCE.md §1 and §2.</p>
+
+<h2 class="section">9. Operations</h2>
+
+<h3>The monthly cycle</h3>
+
+<ol>
+  <li>Staff scan receipts as they arrive, throughout the month. No network needed beyond the scan itself.</li>
+  <li>Corrections are made on the phone that scanned the receipt, via the detail screen.</li>
+  <li>At month end, one person opens <b>Export</b>, picks the month, enters the amount received from the account and the four signature names, and generates the sheet.</li>
+  <li>The sheet is shared from the phone (email, chat, or file share) and printed for signature.</li>
+</ol>
+
+<p>Before generating, confirm every phone has opened the app with a connection —
+otherwise a colleague's unsynced scans will be missing from the sheet.</p>
+
+<h3>Runbook</h3>
+
+<table>
+  <thead><tr><th>Symptom</th><th>Cause and action</th></tr></thead>
+  <tbody>
+    <tr><td>"OpenRouter API key not found"</td><td>Key missing from the build, or the dev server started before the variable existed. Restart with <code>pnpm start --clear</code>; for a build, check the EAS environment variable and publish an update.</td></tr>
+    <tr><td>Scans fail with 402</td><td>OpenRouter credits exhausted. Top up or rotate the key (MAINTENANCE.md §3).</td></tr>
+    <tr><td>Scans fail with 401</td><td>Invalid or revoked key. The app stops retrying immediately by design.</td></tr>
+    <tr><td>A colleague's receipts are missing</td><td>Their phone has not synced. Have them open the app with a connection; the backlog uploads automatically. If it persists, check the Supabase URL and anon key are both present in the build.</td></tr>
+    <tr><td>Photos show as blank thumbnails</td><td>Expected for receipts scanned before photo sync existed, and for any upload that failed. Settings &rarr; Data &rarr; Re-upload all receipts on the owning phone backfills them.</td></tr>
+    <tr><td>Nothing syncs at all, from any device</td><td>Almost always a schema mismatch — an app update shipped ahead of its SQL. Apply <span class="filepath">supabase/schema.sql</span>.</td></tr>
+    <tr><td>Remote table was emptied by accident</td><td>Do <b>not</b> clear any phone. Run Settings &rarr; Data &rarr; Re-upload all receipts on each device.</td></tr>
+    <tr><td>Bangla text is unreadable in an export</td><td>Confirm the file is <code>.xlsx</code>. CSV cannot carry the encoding reliably and was removed for this reason.</td></tr>
+    <tr><td>Blurry photos being accepted</td><td>The quality gate is threshold-based and can be recalibrated in <span class="filepath">utils/image-quality.ts</span>. Constants are at the top of the file.</td></tr>
+    <tr><td>App will not open after an update</td><td>Reinstall the APK. The previous OTA bundle is replaced, not kept, so rollback means publishing a corrected update.</td></tr>
+  </tbody>
+</table>
+
+<h3>Capacity and limits</h3>
+
+<table>
+  <thead><tr><th>Limit</th><th>Value</th><th>When it matters</th></tr></thead>
+  <tbody>
+    <tr><td>Photo storage</td><td>~250&nbsp;KB per receipt after resize; Supabase free tier is 1&nbsp;GB</td><td>Roughly 4,000 receipts. Full-resolution frames would have exhausted it in a few hundred.</td></tr>
+    <tr><td>Per-file bucket limit</td><td>5&nbsp;MB</td><td>Never reached after resizing.</td></tr>
+    <tr><td>Pull size</td><td>2,000 newest rows</td><td>A team accumulating more will stop seeing the oldest. Raise the limit in <code>fetchRemoteReceipts</code>.</td></tr>
+    <tr><td>Push batch</td><td>500 pending rows per pass</td><td>Only relevant after a long offline period; the next launch continues.</td></tr>
+    <tr><td>Re-upload bound</td><td>20 passes, so 10,000 receipts</td><td>A hard stop, not a target. Documented in <code>services/config.ts</code>.</td></tr>
+    <tr><td>Image accepted for scanning</td><td>&le; 20&nbsp;MB file, &le; 33&nbsp;megapixels, compressed to &le; 4&nbsp;MB for the API</td><td>Modern phone cameras are within these.</td></tr>
+  </tbody>
+</table>
+
+<h2 class="section">10. Known limitations</h2>
+
+<ul>
+  <li><b>Eventual consistency, no conflict resolution.</b> Simultaneous edits on two phones resolve last-write-wins.</li>
+  <li><b>No authentication.</b> Possession of the app is possession of the office's expense data.</li>
+  <li><b>No remote wipe</b> for a lost device, and unsynced scans on it are unrecoverable.</li>
+  <li><b>No backup automation.</b> Supabase's own backups are the only copy beyond the phones. Nothing exports the table on a schedule.</li>
+  <li><b>Delete-all is available in Settings</b> and is protected only by a two-tap confirmation. Consider hiding it before wider rollout.</li>
+  <li><b>iOS is configured but untested.</b> Bundle identifier and permissions exist; no iOS build has been distributed.</li>
+  <li><b>Accuracy is not guaranteed.</b> Confidence is reported per receipt and low-confidence scans are flagged, but a human check before approval remains part of the process. That is what the signature blocks are for.</li>
+</ul>
+
+<h2>11. Related documents</h2>
+
+<table>
+  <thead><tr><th>Document</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td><span class="filepath">docs/developer-guide.html</span></td><td>Codebase structure, module reference, conventions, testing, known traps.</td></tr>
+    <tr><td><span class="filepath">MAINTENANCE.md</span></td><td>Living runbook with exact commands: builds, OTA, key rotation, schema changes, release notes. The authority for procedures.</td></tr>
+    <tr><td><span class="filepath">supabase/schema.sql</span></td><td>The shared database definition. Re-runnable.</td></tr>
+    <tr><td><span class="filepath">RELEASE_NOTES.docx</span></td><td>What changed in each release, newest first.</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  Strativ AB &middot; AI Receipt Scanner System Documentation &middot; 20 August 2026 &middot; Internal
+</footer>
+
+</body>
+</html>
