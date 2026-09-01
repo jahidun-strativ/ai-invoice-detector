@@ -56,7 +56,8 @@ AI vendor account, and one Supabase project.</p>
                                        |
                              other phones push / pull
 
-     AI:  phone  --HTTPS-->  OpenRouter  -->  Gemini 2.5 Flash</pre>
+     AI:  phone  --HTTPS-->  OpenRouter  -->  Gemini 2.5 Flash
+                                          -->  Gemini 2.5 Pro  (retries only)</pre>
 
 <h3>Design principles</h3>
 
@@ -230,10 +231,10 @@ limit) and merges them. The <b>ownership rule</b> decides each row:</p>
   <thead><tr><th>Service</th><th>Used for</th><th>If unavailable</th><th>Cost model</th></tr></thead>
   <tbody>
     <tr>
-      <td>OpenRouter &rarr; Gemini 2.5 Flash</td>
+      <td>OpenRouter &rarr; Gemini 2.5 Flash, escalating to 2.5 Pro on retry</td>
       <td>Reading each receipt</td>
       <td>Scanning stops working. Everything else — history, editing, export — continues. This is the only hard external dependency.</td>
-      <td>Per request. Use a spend-capped key.</td>
+      <td>Per request. Flash reads every receipt; only scans that fail the first pass (low confidence, or amounts that do not add up) are re-read on Pro at roughly 4&times; the price. Use a spend-capped key.</td>
     </tr>
     <tr>
       <td>Supabase (Postgres + Storage)</td>

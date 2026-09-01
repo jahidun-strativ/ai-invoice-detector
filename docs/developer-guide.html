@@ -83,7 +83,7 @@ pnpm start                     # add --clear if the bundler caches a stale env</
 <h3>Everyday commands</h3>
 
 <pre><code>pnpm start                    # dev server
-pnpm test                     # jest-expo, 96 tests
+pnpm test                     # jest-expo, 113 tests
 npx tsc --noEmit              # typecheck
 npx expo lint                 # eslint
 npx expo install &lt;pkg&gt;        # install with an SDK-compatible version</code></pre>
@@ -140,6 +140,7 @@ times a day.</p>
         v
   parseReceiptWithRetry   OpenRouter -> Gemini 2.5 Flash, JSON mode
         |                 retry with backoff, best-result tracking
+        |                 amounts that don't add up -> re-read on Gemini 2.5 Pro
         v
   normalizeResponse       ISO dates, Bangla numerals, confidence recalibration
         |
@@ -167,9 +168,10 @@ button must stay.</p>
 <code>parseReceiptWithRetry</code> — and everything else is internal on purpose.</p>
 
 <ul>
-  <li><b>Endpoint</b>: OpenRouter chat completions, model in the single <code>MODEL_ID</code> constant (<code>google/gemini-2.5-flash</code>), JSON mode, temperature 0, base64 data URI.</li>
-  <li><b>Prompt</b>: tuned for Bangla and Bengali handwriting, including a Bangla alphabet reference and numeral-conversion rules. Retry attempts 2+ switch to a harder second-pass prompt.</li>
-  <li><b>Retry</b>: the image is processed once and reused; backoff is 2&nbsp;s then 4&nbsp;s. The best-scoring attempt is kept if none clears the acceptance gate (<code>total</code> present, calibrated confidence &ge; 0.45).</li>
+  <li><b>Endpoint</b>: OpenRouter chat completions, JSON mode, temperature 0, base64 data URI. Two model constants: <code>MODEL_ID</code> (<code>google/gemini-2.5-flash</code>) for the first pass and <code>FALLBACK_MODEL_ID</code> (<code>google/gemini-2.5-pro</code>) for every retry.</li>
+  <li><b>Prompt</b>: tuned for Bangla and Bengali handwriting, including a Bangla alphabet reference and numeral-conversion rules, and it asks the model to verify its own arithmetic before answering. Retry attempts 2+ switch to a harder second-pass prompt.</li>
+  <li><b>Retry escalates the model, it does not repeat it.</b> At temperature 0 a model that misread a digit misreads it identically on a second ask, so the retry moves to Pro (4.2&times; the input price, paid only on the minority of scans that fail). When the failure was arithmetic, the specific discrepancy is quoted into the re-read prompt rather than a generic instruction to try harder.</li>
+  <li><b>Retry</b>: the image is processed once and reused; backoff is 2&nbsp;s then 4&nbsp;s. The best-scoring attempt is kept if none clears the acceptance gate (<code>total</code> present, calibrated confidence &ge; 0.45, and on the first attempt only, amounts that reconcile).</li>
   <li><b>401 and 402 abort immediately</b> — a bad key or exhausted credits cannot be fixed by retrying.</li>
   <li><b>It never throws.</b> A failure returns a populated error object so the capture screen always has something to render.</li>
 </ul>
@@ -282,7 +284,7 @@ rather than preferences:</p>
 
 <pre><code>pnpm test</code></pre>
 
-<p>96 tests across three suites, on the <code>jest-expo</code> preset. The
+<p>113 tests across five suites, on the <code>jest-expo</code> preset. The
 interesting part of the setup is <span class="filepath">__mocks__/expo-sqlite.js</span>,
 which maps <code>expo-sqlite</code> onto Node's built-in <code>node:sqlite</code>.
 Storage tests therefore execute real SQL — migrations, constraints and the
@@ -294,6 +296,8 @@ ownership rule are genuinely exercised rather than asserted against a stub.</p>
     <tr><td><code>xlsx-export.test.ts</code></td><td>Sheet layout: merges, column spans, signature block spacing, numeric money cells, Bangla round-trip.</td></tr>
     <tr><td><code>remote-db.test.ts</code></td><td>Wire format: endpoint paths, auth headers, upsert preference, row mapping, photo upload, ownership rule.</td></tr>
     <tr><td><code>storage.config.test.ts</code></td><td>Config and export-column storage, month queries, sync bookkeeping.</td></tr>
+    <tr><td><code>export.test.ts</code></td><td>Save-to-device: the SAF write, a cancelled folder picker, the iOS share fallback, MIME by extension.</td></tr>
+    <tr><td><code>reconcile.test.ts</code></td><td>Arithmetic check: misread digits caught, and the rounding and missing-field cases that must <i>not</i> raise a warning.</td></tr>
   </tbody>
 </table>
 
@@ -312,6 +316,17 @@ merchant names: a CSV carries no encoding declaration, so spreadsheets guess the
 code page. XLSX stores UTF-8 inside the file. CSV was deleted rather than patched
 with a BOM, because the flat <code>=== RECEIPT SUMMARY ===</code> layout was also
 unreadable for the people approving bills. <b>Do not reintroduce it.</b></p>
+
+<h4>Confidence says nothing about a misread digit</h4>
+<p>A model that reads a handwritten 1 as a 7 reports the same confidence it would
+have for the correct reading — it is not uncertain, it is wrong. So confidence
+could never gate amounts, and a wrong total flowed silently into a sheet that
+people sign and pay against. <code>utils/reconcile.ts</code> uses the receipt's own
+redundancy instead (items &rarr; subtotal &rarr; total). It is <b>advisory</b>: real
+receipts fail to balance because of unlisted discounts and service charges, so it
+forces one re-read and then flags for review rather than rejecting. It is also
+derived on render, never stored — a stored flag would go stale the moment
+someone corrected the total.</p>
 
 <h4>Cell styles vanished on write</h4>
 <p>Plain <code>xlsx</code> discards styles silently. The dependency is
@@ -359,10 +374,12 @@ next pull.</p>
 <h2 class="section">10. Common changes</h2>
 
 <h4>Swap the AI model</h4>
-<p>Change the single <code>MODEL_ID</code> constant in
-<code>services/ai-vision.ts</code>. The model must support image input and JSON
-mode. Verify against a Bangla handwritten receipt before shipping — that is where
-models differ most.</p>
+<p>Change <code>MODEL_ID</code> (first pass) and/or <code>FALLBACK_MODEL_ID</code>
+(retries) in <code>services/ai-vision.ts</code>. Both must support image input and
+JSON mode. Keep them <i>different</i> models: the point of the fallback is that
+re-asking the same model at temperature 0 returns the same misreading. Verify
+against a Bangla handwritten receipt before shipping — that is where models
+differ most.</p>
 
 <h4>Add a column to the exported sheet</h4>
 <p>Add an entry to <code>DEFAULT_COLUMNS</code> in <code>services/config.ts</code>,

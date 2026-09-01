@@ -198,13 +198,22 @@ npx -y sharp-cli --input assets/brand/app-icon.svg --output assets/images/icon.p
 
 ## 4) Swapping the AI Model
 
-One constant in `services/ai-vision.ts`:
+Two constants in `services/ai-vision.ts`:
 
 ```ts
-const MODEL_ID = "google/gemini-2.5-flash";
+const MODEL_ID = "google/gemini-2.5-flash";          // every first pass
+const FALLBACK_MODEL_ID = "google/gemini-2.5-pro";   // every retry
 ```
 
 Any OpenRouter model slug works **if it supports vision/image input** and JSON mode. Also update `AI_MODEL_LABEL` in `app/(tabs)/settings.tsx` and the model mentions in README and `docs/developer-guide.html`. Test with printed English, printed Bangla, and handwritten Bangla receipts before shipping.
+
+**Keep the two models different.** The retry exists because a model at temperature 0 that misread a digit returns the same misreading when asked again; pointing both constants at one model quietly turns the retry back into a repeat. Retries fire on low confidence or on amounts that fail `utils/reconcile.ts`, so only a minority of scans pay the higher price (Pro is ~4.2x Flash on input, ~4x on output).
+
+Verify a slug before shipping it — a wrong one fails every retry silently:
+
+```bash
+curl -s https://openrouter.ai/api/v1/models | grep -o '"id":"google/gemini-2.5[^"]*"'
+```
 
 ### API error behavior
 
