@@ -1,7 +1,9 @@
 /**
- * Export state for the monthly workflow: which month is selected, generating
- * the workbook, and handing it to the share sheet. Kept separate from
- * receipts-context because nothing else in the app needs it.
+ * Export state for the monthly workflow: which month is selected and
+ * generating the workbook. Delivering the finished file — share sheet or save
+ * to a folder — is `deliverFile` in services/export, shared with the other
+ * export sites. Kept separate from receipts-context because nothing else in
+ * the app needs it.
  */
 
 import {
@@ -13,7 +15,6 @@ import {
   useMemo,
   useState,
 } from 'react';
-import * as Sharing from 'expo-sharing';
 import { getColumns, getOfficeName, pullRemoteReceipts } from '@/services/config';
 import {
   getMonthlyPeriods,
@@ -40,7 +41,6 @@ interface ExportContextValue extends ExportState {
     signatures: SignatureConfig,
     amountReceived?: number
   ) => Promise<string>;
-  shareExport: (filepath: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -122,18 +122,6 @@ export function ExportProvider({ children }: { children: ReactNode }) {
     [selectedPeriod]
   );
 
-  const shareExport = useCallback(async (filepath: string) => {
-    if (!(await Sharing.isAvailableAsync())) {
-      throw new Error('Sharing is not available on this device.');
-    }
-    await Sharing.shareAsync(filepath, {
-      mimeType:
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      dialogTitle: 'Share Bill Approval Sheet',
-      UTI: 'org.openxmlformats.spreadsheetml.sheet',
-    });
-  }, []);
-
   const value = useMemo(
     () => ({
       periods,
@@ -146,7 +134,6 @@ export function ExportProvider({ children }: { children: ReactNode }) {
       refresh,
       selectPeriod: setSelectedPeriod,
       generateExport,
-      shareExport,
       clearError: () => setError(null),
     }),
     [
@@ -159,7 +146,6 @@ export function ExportProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       generateExport,
-      shareExport,
     ]
   );
 

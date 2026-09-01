@@ -16,6 +16,7 @@
 <h3 style="font-size: 12pt; color: #1A0E1C; margin: 16pt 0 6pt 0;">New Features</h3>
 <ul>
 <li>Receipt photos are now shared along with the receipt, so a scan taken on one phone can be opened and read on every other phone. Previously a colleague&rsquo;s receipt arrived with a blank thumbnail and no way to check it.</li>
+<li>An exported sheet can now be saved directly into a folder on the phone &mdash; Downloads, Google Drive, an SD card &mdash; instead of only being passed on through the share sheet. Every export now asks <i>Share</i> or <i>Save to device</i>, on the monthly sheet, the History export and a single receipt alike.</li>
 </ul>
 
 <h3 style="font-size: 12pt; color: #1A0E1C; margin: 16pt 0 6pt 0;">Technical</h3>
@@ -28,7 +29,8 @@
 <li>React Navigation is now provided by Expo Router and is no longer a direct dependency; keeping both produced two conflicting sets of types.</li>
 <li>Update targeting now derives from the app&rsquo;s native build rather than its version number, so an update built for one generation of the app can no longer be delivered to another and crash it.</li>
 <li>App file numbers now increment automatically for internal releases, so two different builds can no longer report the same number.</li>
-<li>Test suite now at 96 tests.</li>
+<li>Saving an export uses Android&rsquo;s Storage Access Framework. The app&rsquo;s own storage is private and no file manager can open it, so the destination folder is chosen at the moment of saving; the file written there is a normal file that outlives the app.</li>
+<li>Test suite now at 100 tests.</li>
 </ul>
 
 <hr style="border: none; border-top: 0.5pt solid #E4E7EC; margin: 24pt 0 20pt 0;">

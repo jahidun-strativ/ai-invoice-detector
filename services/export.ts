@@ -1,6 +1,7 @@
 /**
  * Export Service
- * Raw JSON export (for backup/debugging) and file sharing.
+ * Raw JSON export (for backup/debugging), file sharing, and saving an export
+ * to a folder on the device.
  *
  * The office document is XLSX — see `services/xlsx-export.ts`. CSV was removed
  * deliberately: a spreadsheet opening a CSV assumes the system code page, so
@@ -10,6 +11,7 @@
  * recur.
  */
 
+import { Alert, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Receipt } from '@/types/receipt';
@@ -107,10 +109,89 @@ export async function shareFile(filepath: string): Promise<void> {
 }
 
 /**
+ * Save an exported file into a folder the user picks, so the sheet lands in
+ * Downloads (or Drive, or an SD card) as a real file instead of only ever
+ * passing through the share sheet.
+ *
+ * Android only has this: the app's own documentDirectory is private storage no
+ * file manager can see, so the Storage Access Framework is the only way to put
+ * a file somewhere the user can open it later. iOS has no SAF, and its share
+ * sheet already offers "Save to Files", so there this just shares.
+ *
+ * Returns the filename written, or null if the user backed out of the picker.
+ */
+export async function saveFileToDevice(filepath: string): Promise<string | null> {
+  const filename = filepath.split('/').pop() ?? 'export';
+  const extension = filename.split('.').pop()?.toLowerCase() ?? '';
+  const mimeType = MIME_TYPES[extension] ?? 'application/octet-stream';
+
+  if (Platform.OS !== 'android') {
+    await shareFile(filepath);
+    return filename;
+  }
+
+  // ponytail: the folder is picked on every save. Persist
+  // permission.directoryUri in the config table if that gets tedious.
+  const permission =
+    await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+  if (!permission.granted) return null;
+
+  // Base64 round-trip so the same path works for the binary XLSX and the JSON.
+  const contents = await FileSystem.readAsStringAsync(filepath, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  // createFileAsync appends the extension itself, from the MIME type.
+  const target = await FileSystem.StorageAccessFramework.createFileAsync(
+    permission.directoryUri,
+    filename.replace(/\.[^.]+$/, ''),
+    mimeType,
+  );
+  await FileSystem.writeAsStringAsync(target, contents, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  return filename;
+}
+
+/**
+ * Hand a finished export to the user: share it, or save it to the device.
+ * Every export site funnels through here so the choice is the same everywhere.
+ */
+export async function deliverFile(filepath: string): Promise<void> {
+  if (Platform.OS !== 'android') {
+    await shareFile(filepath);
+    return;
+  }
+
+  const run = (action: () => Promise<unknown>) => () => {
+    // Alert callbacks are sync — a rejection here would be an unhandled
+    // promise, and the user would see nothing happen at all.
+    action().catch((error: unknown) =>
+      Alert.alert(
+        'Export Failed',
+        error instanceof Error ? error.message : 'Could not deliver the file.',
+      ),
+    );
+  };
+
+  Alert.alert(filepath.split('/').pop() ?? 'Export ready', 'Where should it go?', [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Share', onPress: run(() => shareFile(filepath)) },
+    {
+      text: 'Save to device',
+      onPress: run(async () => {
+        const saved = await saveFileToDevice(filepath);
+        if (saved) Alert.alert('Saved', `${saved} was saved to the folder you picked.`);
+      }),
+    },
+  ]);
+}
+
+/**
  * Export raw JSON and share in one step
  */
 export async function exportAndShareJson(receipts: Receipt[]): Promise<void> {
-  await shareFile(await exportReceiptsAsJson(receipts));
+  await deliverFile(await exportReceiptsAsJson(receipts));
 }
 
 /**
