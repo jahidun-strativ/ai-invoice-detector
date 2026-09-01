@@ -11,7 +11,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Type } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { exportAndShareJson, shareFile } from '@/services/export';
+import { deliverFile, exportAndShareJson } from '@/services/export';
 import { exportReceiptsAsSheet } from '@/services/xlsx-export';
 import { getReceiptById } from '@/services/storage';
 import { Receipt, ReceiptInput } from '@/types/receipt';
@@ -93,7 +93,7 @@ export default function ReceiptDetailScreen() {
     if (!receipt) return;
     try {
       setIsExporting(true);
-      await shareFile(await exportReceiptsAsSheet([receipt]));
+      await deliverFile(await exportReceiptsAsSheet([receipt]));
     } catch (error) {
       Alert.alert(
         'Error',

@@ -1,0 +1,80 @@
+<html>
+<head><meta charset="utf-8"><title>AI Receipt Scanner — Release Notes</title></head>
+<body style="font-family: Inter, Helvetica, Arial, sans-serif; color: #1A0E1C; font-size: 11pt; line-height: 1.5;">
+
+<p style="font-size: 9pt; letter-spacing: 1px; color: #FE5001; font-weight: bold; margin-bottom: 2pt;">STRATIV</p>
+<h1 style="font-size: 24pt; color: #1A0E1C; margin: 0 0 4pt 0;">AI Receipt Scanner</h1>
+<p style="font-size: 13pt; color: #4C434E; margin: 0 0 18pt 0;">Release Notes — internal expense processing app</p>
+
+<hr style="border: none; border-top: 2pt solid #FE5001; margin-bottom: 20pt;">
+
+<h2 style="font-size: 15pt; color: #FE5001; margin: 0 0 2pt 0;">20 August 2026</h2>
+<p style="font-size: 9.5pt; color: #4C434E; margin: 0 0 12pt 0;">App version 1.1.0 &middot; Android &middot; Update channel: main</p>
+
+<p style="margin: 0 0 12pt 0;"><b>This release is installed, not updated in place.</b> Everyone needs to install the new app file once; automatic updates resume afterwards.</p>
+
+<h3 style="font-size: 12pt; color: #1A0E1C; margin: 16pt 0 6pt 0;">New Features</h3>
+<ul>
+<li>Receipt photos are now shared along with the receipt, so a scan taken on one phone can be opened and read on every other phone. Previously a colleague&rsquo;s receipt arrived with a blank thumbnail and no way to check it.</li>
+<li>An exported sheet can now be saved directly into a folder on the phone &mdash; Downloads, Google Drive, an SD card &mdash; instead of only being passed on through the share sheet. Every export now asks <i>Share</i> or <i>Save to device</i>, on the monthly sheet, the History export and a single receipt alike.</li>
+</ul>
+
+<h3 style="font-size: 12pt; color: #1A0E1C; margin: 16pt 0 6pt 0;">Technical</h3>
+<ul>
+<li>Photos are uploaded to a private Supabase Storage bucket (<i>receipt-images</i>) over the same REST path as the records, with read access through the app key only &mdash; receipt IDs contain a timestamp, so a public link would be partly guessable.</li>
+<li>Each photo is resized before upload, keeping a receipt around 250&nbsp;KB instead of a 2&ndash;4&nbsp;MB camera frame, so the free storage tier holds thousands of receipts rather than a few hundred.</li>
+<li>A photo that fails to upload never holds back the receipt itself; the record still reaches the database and Settings &rarr; Re-upload all receipts sends the photo later.</li>
+<li>Requires the updated <i>supabase/schema.sql</i> (adds the <i>image_path</i> column and the storage bucket) to be applied before the app update is published.</li>
+<li>Upgraded to Expo SDK 57 and React Native 0.86.2, from SDK 54 and React Native 0.81.5 &mdash; three SDK generations, thirty package versions. React Native 0.87 exists but no Expo release supports it yet.</li>
+<li>React Navigation is now provided by Expo Router and is no longer a direct dependency; keeping both produced two conflicting sets of types.</li>
+<li>Update targeting now derives from the app&rsquo;s native build rather than its version number, so an update built for one generation of the app can no longer be delivered to another and crash it.</li>
+<li>App file numbers now increment automatically for internal releases, so two different builds can no longer report the same number.</li>
+<li>Saving an export uses Android&rsquo;s Storage Access Framework. The app&rsquo;s own storage is private and no file manager can open it, so the destination folder is chosen at the moment of saving; the file written there is a normal file that outlives the app.</li>
+<li>Test suite now at 100 tests.</li>
+</ul>
+
+<hr style="border: none; border-top: 0.5pt solid #E4E7EC; margin: 24pt 0 20pt 0;">
+
+<h2 style="font-size: 15pt; color: #FE5001; margin: 0 0 2pt 0;">19 August 2026</h2>
+<p style="font-size: 9.5pt; color: #4C434E; margin: 0 0 12pt 0;">App version 1.0.0 &middot; Android &middot; Update channel: main</p>
+
+<h3 style="font-size: 12pt; color: #1A0E1C; margin: 16pt 0 6pt 0;">New Features</h3>
+<ul>
+<li>Receipts now build a monthly <b>Bill Approval Sheet</b> in Excel, with the office name as the heading, one row per receipt, the month&rsquo;s totals, and a signature block for Prepared By, Checked By, Reviewed By and Approved By.</li>
+<li>The team can pick any past month from the new Export tab and produce that month&rsquo;s sheet in one step, ready to print and sign.</li>
+<li>Scans now appear on every team member&rsquo;s phone, so one sheet covers the whole office instead of one sheet per person.</li>
+<li>Scanning a receipt no longer requires signing in to Google &mdash; staff can scan all month with no account and no network.</li>
+<li>The home screen shows the current month&rsquo;s receipt count and total at a glance.</li>
+<li>The office name is set once in Settings and appears on every exported sheet, and the columns on the sheet can be chosen and reordered.</li>
+<li>The Scan button now sits in the centre of the navigation bar as a raised button, making it the obvious primary action.</li>
+</ul>
+
+<h3 style="font-size: 12pt; color: #1A0E1C; margin: 16pt 0 6pt 0;">Fixes</h3>
+<ul>
+<li>Bangla merchant names now appear correctly in exported files, instead of the garbled text the previous CSV export produced.</li>
+<li>The approval date now has a bordered box to write in, rather than a label pressed against the edge of the page.</li>
+<li>The summary line &ldquo;Amount Received from Account&rdquo; is no longer cut short.</li>
+<li>The four signature blocks are spaced evenly across the page instead of one stretching across half of it.</li>
+<li>Exported sheets stay white when opened on a phone in dark mode.</li>
+<li>Corrections made to a receipt after scanning now reach the shared records, where previously the original values were kept.</li>
+<li>Receipts whose date could not be read are now included in their month&rsquo;s sheet instead of being left out of every month.</li>
+<li>A receipt scanned without a signal is sent automatically the next time the app opens, so nothing is missed when working offline.</li>
+</ul>
+
+<h3 style="font-size: 12pt; color: #1A0E1C; margin: 16pt 0 6pt 0;">Technical</h3>
+<ul>
+<li>Added a Supabase <i>receipts</i> table with row-level security policies allowing the app to add and read records but never delete them.</li>
+<li>Two-way sync between each device and the shared database, keyed on receipt ID so re-sending never creates duplicates.</li>
+<li>Replaced the CSV export with XLSX (xlsx-js-style), which carries UTF-8 inside the file and supports cell formatting.</li>
+<li>Added a <i>synced_at</i> column to track which receipts have reached the database.</li>
+<li>Per-environment build configuration for development, preview and production.</li>
+<li>Excluded the web platform from builds, so the update bundle no longer fails on a WebAssembly dependency it never needed.</li>
+<li>Test suite added and now runs: 89 tests covering sheet layout, sync behaviour and configuration storage.</li>
+</ul>
+
+<p style="font-size: 9pt; color: #4C434E; margin-top: 28pt; border-top: 0.5pt solid #E4E7EC; padding-top: 8pt;">
+Strativ AB &middot; Internal distribution only &middot; Not published to any app store
+</p>
+
+</body>
+</html>

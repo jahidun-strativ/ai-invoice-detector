@@ -47,9 +47,15 @@ export function ReceiptEditModal({
   const [showItems, setShowItems] = useState(true);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Initialize form data when receipt changes
+  // Initialize form data when receipt changes.
+  //
+  // Pre-existing prop-to-state sync, flagged by a rule new in
+  // eslint-config-expo 57. The correct fix is to derive the draft during render
+  // keyed on receipt.id, but this form has no test coverage, so it is not being
+  // rewritten inside an SDK upgrade. Tracked as follow-up.
   useEffect(() => {
     if (receipt) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
         merchant_name: receipt.merchant_name,
         receipt_date: receipt.receipt_date,

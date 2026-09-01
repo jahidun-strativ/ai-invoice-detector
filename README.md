@@ -62,7 +62,8 @@ npm run development-builds
 
 ## Documentation
 
-- [APP_DOC.md](APP_DOC.md) — architecture, data flow, module reference, theming
+- [docs/developer-guide.html](docs/developer-guide.html) — architecture, data flow, module reference, conventions, testing (PDF: `docs/developer-guide.pdf`)
+- [docs/system-documentation.html](docs/system-documentation.html) — data model, sync, security, environments, operations (PDF: `docs/system-documentation.pdf`)
 - [MAINTENANCE.md](MAINTENANCE.md) — releases, OTA updates, key rotation, model swaps, upgrades
 - [CLAUDE.md](CLAUDE.md) — guidance for AI coding assistants
 
@@ -86,7 +87,7 @@ npm run development-builds
 
 ## Technologies
 
-Expo SDK 54 / React Native · Expo Router · expo-sqlite · OpenRouter (Gemini 2.5 Flash) · expo-camera / expo-image-picker · expo-updates (OTA)
+Expo SDK 57 / React Native 0.86 · Expo Router · expo-sqlite · OpenRouter (Gemini 2.5 Flash) · expo-camera / expo-image-picker · expo-updates (OTA)
 
 ## License
 

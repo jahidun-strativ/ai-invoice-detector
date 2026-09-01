@@ -1,0 +1,196 @@
+/* Strativ document styling — print-first.
+   Brand rules: Strativ Orange #FE5001 is the only accent, Warm Black #1A0E1C
+   stands in for black, no gradients anywhere, no emoji. */
+
+:root {
+  --orange: #FE5001;
+  --black: #1A0E1C;
+  --grey: #4C434E;
+  --rule: #E4E7EC;
+  --surface: #F7F7F8;
+}
+
+@page {
+  size: A4;
+  margin: 18mm 16mm 20mm 16mm;
+}
+
+body {
+  font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: var(--black);
+  font-size: 10pt;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ── Cover ───────────────────────────────────────────────────────────── */
+
+.cover {
+  page-break-after: always;
+  padding-top: 40mm;
+}
+
+.wordmark {
+  font-size: 9pt;
+  letter-spacing: 2px;
+  color: var(--orange);
+  font-weight: 700;
+  margin: 0 0 6pt 0;
+}
+
+.cover h1 {
+  font-size: 30pt;
+  line-height: 1.1;
+  margin: 0 0 6pt 0;
+  border: 0;
+}
+
+.cover .subtitle {
+  font-size: 14pt;
+  color: var(--grey);
+  margin: 0 0 24pt 0;
+}
+
+.cover .rule {
+  border-top: 3pt solid var(--orange);
+  width: 60mm;
+  margin: 0 0 24pt 0;
+}
+
+.meta {
+  font-size: 9.5pt;
+  color: var(--grey);
+}
+
+.meta b {
+  color: var(--black);
+  font-weight: 600;
+}
+
+/* ── Headings ────────────────────────────────────────────────────────── */
+
+h1, h2, h3, h4 {
+  font-family: "Expletus Sans", Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 16pt;
+  color: var(--black);
+  margin: 22pt 0 8pt 0;
+  padding-bottom: 4pt;
+  border-bottom: 1.5pt solid var(--orange);
+  page-break-after: avoid;
+}
+
+h3 {
+  font-size: 12pt;
+  color: var(--black);
+  margin: 16pt 0 4pt 0;
+  page-break-after: avoid;
+}
+
+h4 {
+  font-size: 10.5pt;
+  color: var(--grey);
+  margin: 12pt 0 2pt 0;
+  page-break-after: avoid;
+}
+
+p { margin: 0 0 8pt 0; }
+ul, ol { margin: 0 0 8pt 0; padding-left: 16pt; }
+li { margin-bottom: 3pt; }
+
+/* ── Tables ──────────────────────────────────────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+  margin: 6pt 0 12pt 0;
+  page-break-inside: avoid;
+}
+
+th {
+  text-align: left;
+  background: var(--black);
+  color: #fff;
+  font-weight: 600;
+  padding: 5pt 7pt;
+}
+
+td {
+  padding: 5pt 7pt;
+  border-bottom: 0.5pt solid var(--rule);
+  vertical-align: top;
+}
+
+tbody tr:nth-child(even) td { background: var(--surface); }
+
+/* ── Code ────────────────────────────────────────────────────────────── */
+
+code {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 8.5pt;
+  background: var(--surface);
+  padding: 1pt 3pt;
+  border-radius: 2pt;
+}
+
+pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 8pt;
+  line-height: 1.45;
+  background: var(--surface);
+  border-left: 2pt solid var(--orange);
+  padding: 8pt 10pt;
+  margin: 6pt 0 12pt 0;
+  white-space: pre;
+  overflow: visible;
+  page-break-inside: avoid;
+}
+
+pre code { background: none; padding: 0; font-size: inherit; }
+
+/* ── Callouts ────────────────────────────────────────────────────────── */
+
+.note, .warn {
+  padding: 8pt 10pt;
+  margin: 8pt 0 12pt 0;
+  font-size: 9.5pt;
+  page-break-inside: avoid;
+  background: var(--surface);
+  border-left: 2pt solid var(--grey);
+}
+
+.warn { border-left-color: var(--orange); }
+
+.note .label, .warn .label {
+  display: block;
+  font-size: 8pt;
+  letter-spacing: 1px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--grey);
+  margin-bottom: 2pt;
+}
+
+.warn .label { color: var(--orange); }
+
+/* ── Misc ────────────────────────────────────────────────────────────── */
+
+.toc { font-size: 9.5pt; }
+.toc ol { padding-left: 18pt; }
+.toc li { margin-bottom: 2pt; }
+
+.section { page-break-before: always; }
+
+footer {
+  margin-top: 24pt;
+  padding-top: 6pt;
+  border-top: 0.5pt solid var(--rule);
+  font-size: 8.5pt;
+  color: var(--grey);
+}
+
+.filepath { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.5pt; }

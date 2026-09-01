@@ -232,10 +232,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   camera: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   permissionContainer: {
     flex: 1,

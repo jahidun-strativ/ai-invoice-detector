@@ -26,7 +26,7 @@ import { ReceiptCardSkeleton } from '@/components/ui/skeleton';
 import { Colors, Type } from '@/constants/theme';
 import { useReceipts } from '@/contexts/receipts-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { exportAndShareJson, shareFile } from '@/services/export';
+import { deliverFile, exportAndShareJson } from '@/services/export';
 import { exportReceiptsAsSheet } from '@/services/xlsx-export';
 import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { Receipt, InvoiceType } from '@/types/receipt';
@@ -128,7 +128,7 @@ export default function HistoryScreen() {
         onPress: async () => {
           try {
             setIsExporting(true);
-            await shareFile(await exportReceiptsAsSheet(receipts));
+            await deliverFile(await exportReceiptsAsSheet(receipts));
           } catch (error) {
             Alert.alert(
               'Error',

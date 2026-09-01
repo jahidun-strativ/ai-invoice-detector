@@ -1,6 +1,6 @@
 # Maintenance Guide
 
-Operational reference for keeping AI Receipt Scanner running: builds, releases, OTA updates, secrets, model changes, and upgrades. For architecture see [APP_DOC.md](APP_DOC.md).
+Operational reference for keeping AI Receipt Scanner running: builds, releases, OTA updates, secrets, model changes, and upgrades. For architecture see [docs/developer-guide.html](docs/developer-guide.html) and [docs/system-documentation.html](docs/system-documentation.html).
 
 ---
 
@@ -85,11 +85,12 @@ The workflow is now local-first and monthly:
   `services/__tests__/xlsx-export.test.ts` (generates a workbook and reads it back).
 - Styling requires **`xlsx-js-style`**, not `xlsx` — the community SheetJS build silently
   drops cell styles on write, which would lose every border and bold heading.
-- **Optional remote database**: Settings → Advanced. Two kinds, detected from the URL:
+- **Optional remote database**, configured by the build (never in the UI). Two kinds,
+  detected from the URL:
   - **Supabase** (`https://<ref>.supabase.co`) — rows are upserted on `id` into the
-    `receipts` table over PostgREST, so re-syncing never duplicates. The table DDL and the
-    write-only RLS policies are in the header of `services/remote-db.ts` — run them once in
-    the SQL editor. No `@supabase/supabase-js` dependency: it bundles realtime/auth/storage
+    `receipts` table over PostgREST, so re-syncing never duplicates. Run
+    `supabase/schema.sql` once in the SQL editor; it is re-runnable and also creates the
+    photo bucket. No `@supabase/supabase-js` dependency: it bundles realtime/auth/storage
     for what is one POST with two headers.
   - Any other `https://` endpoint — receives `{type:'receipt', receipt}` POSTs. Only
     reachable via the `database_url` config row (no UI); the env var is the supported path.
@@ -124,15 +125,23 @@ eas env:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY --scope project
 - **The pull never deletes.** An empty read is indistinguishable from a blocked or failed
   one, so clearing local rows to match the table would wipe good data, including scans not
   yet uploaded. Import only adds or refreshes.
-- **Photos stay on the device that took them.** Imported receipts have an empty `image_uri`
-  and show a blank thumbnail; only the phone that scanned a receipt has its picture.
+- **Photos sync too**, into the private `receipt-images` bucket (resized to 1600px/0.7, so
+  ~250 KB a receipt rather than a 2–4 MB camera frame). The object path lives in
+  `receipts.image_path`; a pulled receipt renders it straight from the bucket. The bucket is
+  private, so reads carry the anon key — `remoteImageSource()` attaches it, and every
+  `<Image>` must go through that helper. A photo that fails to upload never blocks its
+  receipt: the row syncs with `image_path` null, and Re-upload all receipts retries it.
+  A blank thumbnail therefore means "no photo in the bucket", not "another device's scan".
 - **After truncating the table**: Settings → DATA → **Re-upload all receipts** clears
   `synced_at` on every row and pushes them again (batches of 500, up to 10k). Safe to run
   any time — the upsert is keyed on receipt id, so re-running against a full table is a
   no-op.
-- **The anon key ships in the app** like any client credential. It is safe *only* because
-  the RLS policies grant insert/update and no select — it cannot read the table back. Never
-  paste the service key into the app.
+- **The anon key ships in the app** like any client credential, and is extractable from the
+  APK. It grants insert, update and select — select is what makes the shared team view work,
+  so anyone holding the key can read merchant names, dates and amounts. That is the accepted
+  trade-off for internal expense data; add Supabase Auth if it stops being acceptable. What
+  the key can **never** do is delete: no delete policy exists on the table or the bucket, so
+  a leaked key cannot destroy records. Never paste the service key into the app.
 
 ## 3c) App Icon
 
@@ -164,7 +173,7 @@ One constant in `services/ai-vision.ts`:
 const MODEL_ID = "google/gemini-2.5-flash";
 ```
 
-Any OpenRouter model slug works **if it supports vision/image input** and JSON mode. Also update `AI_MODEL_LABEL` in `app/(tabs)/settings.tsx` and the model mentions in README/APP_DOC. Test with printed English, printed Bangla, and handwritten Bangla receipts before shipping.
+Any OpenRouter model slug works **if it supports vision/image input** and JSON mode. Also update `AI_MODEL_LABEL` in `app/(tabs)/settings.tsx` and the model mentions in README and `docs/developer-guide.html`. Test with printed English, printed Bangla, and handwritten Bangla receipts before shipping.
 
 ### API error behavior
 
@@ -205,9 +214,10 @@ For Expo SDK major upgrades, follow the official upgrade guide, then rebuild dev
 
 ## 8) Release Notes
 
-**One living document: `RELEASE_NOTES.docx` at the repo root.** Add each release as
-a new block **at the top**; never start a new file per release, and never rename it.
-The date heading is the only version marker that matters to readers.
+**One living document: `RELEASE_NOTES.docx` at the repo root**, generated from
+`RELEASE_NOTES.html` beside it. Add each release as a new block **at the top**;
+never start a new file per release, and never rename either file. The date heading
+is the only version marker that matters to readers.
 
 ### Block structure (copy the previous block and overwrite it)
 
@@ -249,14 +259,20 @@ The **Post-Deploy Steps** section that skill describes is for Magento 2 and
 WordPress only. This is an Expo app, so deploy steps go in the release *message*
 (`eas update -m "…"`) and in §1, not in the document.
 
-### Regenerating the document from scratch
+### Editing the document
 
-Only needed if the file is lost — normally you edit it in place. There is no
-`python-docx` or `pandoc` on the build machine; macOS `textutil` does the job:
+`RELEASE_NOTES.docx` is **generated**, not hand-edited — its source is
+`RELEASE_NOTES.html` at the repo root. Add the new block to the HTML (which
+diffs in git, unlike the .docx) and regenerate. There is no `python-docx` or
+`pandoc` on the build machine; macOS `textutil` does the job:
 
 ```bash
-textutil -convert docx -output RELEASE_NOTES.docx source.html
+textutil -convert docx -output RELEASE_NOTES.docx RELEASE_NOTES.html
 ```
+
+Editing the .docx by hand instead is allowed but one-way: the HTML then no
+longer matches, and the next regeneration silently reverts your edit. If you
+open it in Word, mirror the change back into the HTML.
 
 **Then fix the colours.** Cocoa converts sRGB to generic RGB on import, so
 `#FE5001` lands as `FA3808` and warm black as `140C15` — both off-brand:
@@ -269,3 +285,33 @@ unzip -q RELEASE_NOTES.docx -d /tmp/docx && \
 ```
 
 Verify with `unzip -p RELEASE_NOTES.docx word/document.xml | grep -o 'w:val="FE5001"'`.
+
+## 9) Documentation
+
+| Document | Format | Update when |
+|---|---|---|
+| `docs/developer-guide.html` → `.pdf` | Generated | The codebase structure, a service's contract, a convention, or the test setup changes |
+| `docs/system-documentation.html` → `.pdf` | Generated | The data model, sync behaviour, security posture, environments, or an operational limit changes |
+| `MAINTENANCE.md` | Markdown (this file) | A procedure changes. This file is the authority for *how*; the PDFs describe *what and why* |
+| `CLAUDE.md` | Markdown | A hard rule changes. Loaded automatically by agents, so a stale line here misleads every future session |
+| `RELEASE_NOTES.docx` | Generated | Every release — see §8 |
+
+Regenerate both PDFs after editing either HTML file:
+
+```bash
+./docs/build-pdf.sh
+```
+
+Chrome headless is the renderer (no pandoc or wkhtmltopdf on the machine), and it is
+the same engine the pages were styled against — open the HTML in a browser to preview.
+Shared styling is in `docs/doc.css`; keep the brand rules (single orange accent, warm
+black, no gradients).
+
+**Commit the PDFs.** They are build output, but the whole point is that someone can be
+handed a document without a toolchain. A stale committed PDF is worse than none, so
+regenerating is part of the same commit as the HTML edit.
+
+**The trap that has already bitten:** `APP_DOC.md` drifted for months — it still described
+CSV export, a purple accent and a Settings screen that no longer existed, because nothing
+ever forced a reader to notice. If a change makes a sentence in these documents false,
+fix the sentence in the same commit. There is no separate documentation pass.

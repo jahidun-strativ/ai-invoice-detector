@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI Receipt Scanner — Developer Guide</title>
+<link rel="stylesheet" href="doc.css">
+</head>
+<body>
+
+<div class="cover">
+  <p class="wordmark">STRATIV</p>
+  <h1>AI Receipt Scanner</h1>
+  <p class="subtitle">Developer Guide</p>
+  <div class="rule"></div>
+  <p class="meta">
+    <b>Audience</b> &nbsp;Developers joining or maintaining the codebase<br>
+    <b>App version</b> &nbsp;1.1.0 &middot; Expo SDK 57 &middot; React Native 0.86.2<br>
+    <b>Platform</b> &nbsp;Android (internal distribution; iOS builds configured but out of scope)<br>
+    <b>Document date</b> &nbsp;20 August 2026<br>
+    <b>Source</b> &nbsp;<span class="filepath">docs/developer-guide.html</span> — edit the HTML, regenerate the PDF
+  </p>
+</div>
+
+<h2>1. What this app is</h2>
+
+<p>An internal Strativ tool for office expense processing. Staff photograph paper
+receipts with their phone; the app reads each one with a vision model, stores the
+result on the device, and at the end of the month produces one Excel
+<b>Bill Approval Sheet</b> that a manager signs.</p>
+
+<p>Three properties shape almost every decision in the codebase:</p>
+
+<ul>
+  <li><b>Local-first.</b> SQLite is the source of truth. Staff scan all month, often with no signal. Nothing in the scanning path may require the network except the one AI call.</li>
+  <li><b>Monthly, not real-time.</b> The deliverable is a document per month, not a live dashboard.</li>
+  <li><b>Read by non-developers.</b> The exported sheet is the product for everyone outside the scanning team. Formatting is a feature, not polish.</li>
+</ul>
+
+<h3>Explicit non-goals</h3>
+
+<ul>
+  <li><b>No Google Sheets integration.</b> Writing to an organisation sheet needs OAuth the app never had. It was built, then deliberately removed. Do not reintroduce it.</li>
+  <li><b>No app store release.</b> Internal distribution only.</li>
+  <li><b>No user accounts.</b> There is no login anywhere in the app.</li>
+  <li><b>No CSV export.</b> Removed on purpose — see §9.</li>
+</ul>
+
+<h2>2. Running it locally</h2>
+
+<p>Prerequisites: Node 20+, pnpm, an Android device or emulator, and an EAS
+account with access to the project.</p>
+
+<pre><code>pnpm install
+cp .env.example .env           # then fill in the keys below
+pnpm start                     # add --clear if the bundler caches a stale env</code></pre>
+
+<div class="warn">
+  <span class="label">Expo Go will not run this app</span>
+  It uses native modules (SQLite, camera, updates) that Expo Go does not bundle.
+  You need a development build: <code>npm run development-builds</code>, install
+  the resulting APK once, then <code>pnpm start</code> connects to it.
+</div>
+
+<h3>Environment variables</h3>
+
+<table>
+  <thead><tr><th>Variable</th><th>Required</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>EXPO_PUBLIC_OPENROUTER_API_KEY</code></td><td>Yes</td><td>The AI call. Without it every scan fails.</td></tr>
+    <tr><td><code>EXPO_PUBLIC_SUPABASE_URL</code></td><td>No</td><td>Shared team database. Omit and the app runs fully local.</td></tr>
+    <tr><td><code>EXPO_PUBLIC_SUPABASE_ANON_KEY</code></td><td>With URL</td><td>Required whenever the URL is set, or every sync is rejected.</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <span class="label">On the EXPO_PUBLIC prefix</span>
+  These values are compiled into the JavaScript bundle. Anyone with the APK can
+  extract them. That is accepted for an internal build — use a spend-capped
+  OpenRouter key — but it is why the Supabase anon key holds no delete
+  permission anywhere. See the System Documentation for the full threat model.
+</div>
+
+<h3>Everyday commands</h3>
+
+<pre><code>pnpm start                    # dev server
+pnpm test                     # jest-expo, 96 tests
+npx tsc --noEmit              # typecheck
+npx expo lint                 # eslint
+npx expo install &lt;pkg&gt;        # install with an SDK-compatible version</code></pre>
+
+<h2 class="section">3. Repository map</h2>
+
+<table>
+  <thead><tr><th>Path</th><th>What lives there</th></tr></thead>
+  <tbody>
+    <tr><td class="filepath">app/</td><td>Expo Router screens. Five tabs plus a receipt detail route.</td></tr>
+    <tr><td class="filepath">services/</td><td>All logic with a side effect: AI, SQLite, export, sync, config.</td></tr>
+    <tr><td class="filepath">contexts/</td><td>React state providers. <code>receipts-context</code> is the single source of truth.</td></tr>
+    <tr><td class="filepath">components/</td><td>Presentational components. <code>components/ui/</code> holds primitives.</td></tr>
+    <tr><td class="filepath">constants/</td><td><code>theme.ts</code> (all design tokens), <code>receipt-ui.ts</code> (type icons, labels, colours).</td></tr>
+    <tr><td class="filepath">utils/</td><td>Pure helpers: <code>format.ts</code>, <code>image-quality.ts</code>.</td></tr>
+    <tr><td class="filepath">hooks/</td><td>Colour scheme, theme colour, OTA updates.</td></tr>
+    <tr><td class="filepath">types/receipt.ts</td><td>The domain types. Read this file first.</td></tr>
+    <tr><td class="filepath">supabase/schema.sql</td><td>Re-runnable DDL and RLS policies for the shared database.</td></tr>
+    <tr><td class="filepath">__mocks__/</td><td><code>expo-sqlite</code> mapped onto Node's <code>node:sqlite</code> so storage tests run real SQL.</td></tr>
+    <tr><td class="filepath">.eas/workflows/</td><td>EAS workflow definitions used by the <code>npm run</code> build scripts.</td></tr>
+  </tbody>
+</table>
+
+<h3>Screens</h3>
+
+<table>
+  <thead><tr><th>Route</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td class="filepath">app/(tabs)/index.tsx</td><td>Dashboard. Current-month card, stats, category breakdown, recent receipts.</td></tr>
+    <tr><td class="filepath">app/(tabs)/history.tsx</td><td>List with type filter chips and debounced merchant search.</td></tr>
+    <tr><td class="filepath">app/(tabs)/capture.tsx</td><td>Camera and the processing state machine. Centre tab, raised orange button.</td></tr>
+    <tr><td class="filepath">app/(tabs)/export.tsx</td><td>Month cards to the export config modal.</td></tr>
+    <tr><td class="filepath">app/(tabs)/settings.tsx</td><td>Office name, sheet columns, data actions, OTA status.</td></tr>
+    <tr><td class="filepath">app/receipt/[id].tsx</td><td>Detail: photo viewer, edit, delete, single-receipt export.</td></tr>
+    <tr><td class="filepath">app/_layout.tsx</td><td>Root providers and the OTA check on start.</td></tr>
+  </tbody>
+</table>
+
+<p>Tab order is deliberate: Home, History, <b>Scan</b>, Export, Settings. Scan sits
+in the middle as a raised circle because it is the action staff perform dozens of
+times a day.</p>
+
+<h2 class="section">4. The data flow</h2>
+
+<pre>  camera / gallery
+        |
+        v
+  validateImage           exists, <= 20 MB, <= 33 MP
+        |
+        v
+  assessReceiptImage      on-device quality gate, no network, no AI
+        |                 blurry / dark / not-a-receipt -> reject
+        |                 (user may override: "Process Anyway")
+        v
+  parseReceiptWithRetry   OpenRouter -> Gemini 2.5 Flash, JSON mode
+        |                 retry with backoff, best-result tracking
+        v
+  normalizeResponse       ISO dates, Bangla numerals, confidence recalibration
+        |
+        v
+  ReceiptsProvider.addReceipt
+        |
+        +--> SQLite (source of truth)
+        |
+        +--> remote-db: photo to Storage bucket, row to Postgres
+             (fire-and-forget; failure is retried, never surfaced as a failed scan)
+        |
+        v
+  export: monthly Bill Approval Sheet (XLSX), or raw JSON</pre>
+
+<p>The quality gate matters commercially: it runs on a 160&nbsp;px thumbnail in a
+few milliseconds and costs nothing, so a blurry photo is rejected before it can
+spend an API call. It is a heuristic, not a classifier, which is why the override
+button must stay.</p>
+
+<h2 class="section">5. Module reference</h2>
+
+<h3>services/ai-vision.ts</h3>
+
+<p>The AI layer. It exports exactly two functions — <code>validateImage</code> and
+<code>parseReceiptWithRetry</code> — and everything else is internal on purpose.</p>
+
+<ul>
+  <li><b>Endpoint</b>: OpenRouter chat completions, model in the single <code>MODEL_ID</code> constant (<code>google/gemini-2.5-flash</code>), JSON mode, temperature 0, base64 data URI.</li>
+  <li><b>Prompt</b>: tuned for Bangla and Bengali handwriting, including a Bangla alphabet reference and numeral-conversion rules. Retry attempts 2+ switch to a harder second-pass prompt.</li>
+  <li><b>Retry</b>: the image is processed once and reused; backoff is 2&nbsp;s then 4&nbsp;s. The best-scoring attempt is kept if none clears the acceptance gate (<code>total</code> present, calibrated confidence &ge; 0.45).</li>
+  <li><b>401 and 402 abort immediately</b> — a bad key or exhausted credits cannot be fixed by retrying.</li>
+  <li><b>It never throws.</b> A failure returns a populated error object so the capture screen always has something to render.</li>
+</ul>
+
+<h3>services/storage.ts</h3>
+
+<p>SQLite CRUD, stats, and the sync bookkeeping. Three tables:</p>
+
+<table>
+  <thead><tr><th>Table</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td><code>receipts</code></td><td>One row per scan. <code>items</code> is JSON text. Indexed on <code>created_at</code>, <code>invoice_type</code>, <code>merchant_name</code>, and <code>substr(receipt_date,1,7)</code> for month queries.</td></tr>
+    <tr><td><code>config</code></td><td>Key/value app settings — office name, optional endpoint.</td></tr>
+    <tr><td><code>export_columns</code></td><td>Which sheet columns are on, and their order.</td></tr>
+  </tbody>
+</table>
+
+<p>Two behaviours to respect when editing this file:</p>
+
+<ul>
+  <li>The schema uses <code>CREATE TABLE IF NOT EXISTS</code>, so a new column needs a <b>guarded <code>ALTER TABLE</code></b> — check <code>PRAGMA table_info</code> and tolerate a duplicate-column error. See MAINTENANCE.md §5.</li>
+  <li>Initialisation is shared through a single <code>initPromise</code>. Two concurrent <code>initDatabase()</code> calls on a cold database previously ran the migration twice and produced <code>duplicate column name: synced_at</code>.</li>
+</ul>
+
+<h3>services/xlsx-export.ts</h3>
+
+<p>The only document format in the app. <code>exportReceiptsAsSheet()</code> produces
+the same layout for one receipt or a filtered list, so there is one sheet to learn.
+The monthly Bill Approval Sheet has a merged office-name heading, columns driven by
+the Settings config, money as numeric cells formatted <code>#,##0.00</code> so Excel
+can total them, a summary block, and four signature blocks spaced proportionally
+across the sheet width.</p>
+
+<div class="warn">
+  <span class="label">Use xlsx-js-style, never plain xlsx</span>
+  The community SheetJS build silently discards cell styles on write — no error,
+  just an unstyled sheet. Related: <code>XLSX.read</code> drops styles even with
+  <code>cellStyles: true</code>, which is why <code>buildBillApprovalSheet</code>
+  is extracted as a pure function and tested directly rather than through a
+  written file.
+</div>
+
+<h3>services/remote-db.ts</h3>
+
+<p>The optional shared database, spoken to over PostgREST with plain
+<code>fetch</code>. Do <b>not</b> add <code>@supabase/supabase-js</code> — its auth,
+realtime and storage bundle buys nothing over one POST with two headers, on a
+platform where bundle size is shipped to every phone.</p>
+
+<ul>
+  <li><b>Two-way.</b> Each device pushes its own scans and pulls the whole office's, so one phone shows another phone's receipts and the monthly sheet covers the team.</li>
+  <li><b>Ownership rule</b> in <code>importRemoteReceipts()</code>: a row with a <code>file://</code> image path was scanned here and is never overwritten by the pull. Rows that came from the database are refreshed, so a correction reaches everyone.</li>
+  <li><b>Photos</b> go to a private Storage bucket, resized first. The row carries the object path; the pull turns it back into a URL.</li>
+  <li><b>Never delete local rows to match the remote.</b> An empty read is indistinguishable from a blocked or failed one, so "the table looks empty, clear the phone" would destroy data — including scans not yet uploaded. The pull only ever adds or refreshes.</li>
+  <li>Raw <code>postgresql://</code> and <code>mysql://</code> URLs are rejected with an explanation: React Native has no TCP socket.</li>
+</ul>
+
+<h3>services/config.ts</h3>
+
+<p>Validation over the config tables, plus the three sync entry points:
+<code>syncPendingReceipts()</code> (offline catch-up on app start),
+<code>pullRemoteReceipts()</code>, and <code>reuploadAllReceipts()</code>
+(Settings &rarr; Data, used to recover after the remote table is truncated).</p>
+
+<h3>services/export.ts</h3>
+
+<p>Raw JSON export and <code>shareFile</code>. That is all it does now.</p>
+
+<h2 class="section">6. State management</h2>
+
+<p><code>ReceiptsProvider</code> (mounted in the root layout) owns database
+initialisation, the receipt list, recent receipts, stats, and filter/search state.
+The rules are short and worth keeping:</p>
+
+<ul>
+  <li>Every mutation goes through <code>addReceipt</code>, <code>updateReceiptById</code> or <code>removeReceipt</code>. Screens consume <code>useReceipts()</code>.</li>
+  <li>No screen calls <code>initDatabase</code> or fetches a list directly.</li>
+  <li><code>status === 'initializing'</code> drives first-load skeletons; background refreshes keep the previous list on screen rather than flashing a spinner.</li>
+</ul>
+
+<p><code>contexts/export-context.tsx</code> holds export screen state only — periods,
+selected month, generating, share. It is deliberately separate: export state is
+short-lived and irrelevant to every other screen.</p>
+
+<h2>7. Design system</h2>
+
+<p>The theme follows the official Strativ design system, and these are hard rules
+rather than preferences:</p>
+
+<ul>
+  <li><b>One accent</b>: Strativ Orange <code>#FE5001</code>. No purple, no indigo.</li>
+  <li><b>No gradients anywhere.</b> Solid fills only.</li>
+  <li><b>"Black" is Warm Black</b> <code>#1A0E1C</code>, never <code>#000</code>. Dark mode uses the neutral dark scale (<code>#0B0E13</code> family), not warm black.</li>
+  <li><b>No emoji in product UI.</b></li>
+  <li>The Strativ logo stays visible in the dashboard header lockup.</li>
+  <li>Category colours come from the data-viz palette in <code>constants/receipt-ui.ts</code> — never brand orange.</li>
+</ul>
+
+<h3>Practical conventions</h3>
+
+<ul>
+  <li><b>No hardcoded hex in screens.</b> Every colour is a token in <code>constants/theme.ts</code>, in light/dark pairs. Need a new colour? Add a token.</li>
+  <li><b>Two fonts</b>: Expletus Sans for headings (<code>Type.display</code>), Inter for everything else. Use the <code>Type</code> families rather than <code>fontWeight</code> — Android does not synthesise weights for custom fonts, so a bold that works on iOS silently renders regular on Android.</li>
+  <li><b>Icons</b> go through <code>components/ui/icon-symbol.tsx</code>, which maps SF Symbol names to MaterialIcons behind a strict <code>IconSymbolName</code> type. A missing icon fails typecheck instead of rendering "?" on Android.</li>
+  <li><b>Safe areas</b> come from <code>useSafeAreaInsets()</code>. Never hardcode top padding.</li>
+  <li>Kebab-case file names, function components, TypeScript throughout.</li>
+</ul>
+
+<h2 class="section">8. Testing</h2>
+
+<pre><code>pnpm test</code></pre>
+
+<p>96 tests across three suites, on the <code>jest-expo</code> preset. The
+interesting part of the setup is <span class="filepath">__mocks__/expo-sqlite.js</span>,
+which maps <code>expo-sqlite</code> onto Node's built-in <code>node:sqlite</code>.
+Storage tests therefore execute real SQL — migrations, constraints and the
+ownership rule are genuinely exercised rather than asserted against a stub.</p>
+
+<table>
+  <thead><tr><th>Suite</th><th>Covers</th></tr></thead>
+  <tbody>
+    <tr><td><code>xlsx-export.test.ts</code></td><td>Sheet layout: merges, column spans, signature block spacing, numeric money cells, Bangla round-trip.</td></tr>
+    <tr><td><code>remote-db.test.ts</code></td><td>Wire format: endpoint paths, auth headers, upsert preference, row mapping, photo upload, ownership rule.</td></tr>
+    <tr><td><code>storage.config.test.ts</code></td><td>Config and export-column storage, month queries, sync bookkeeping.</td></tr>
+  </tbody>
+</table>
+
+<p>What is <i>not</i> covered: no component or navigation tests, and no test hits
+OpenRouter or Supabase for real. Both are deliberate — the value has been in the
+sheet layout and the sync rules, which is where the bugs were.</p>
+
+<h2 class="section">9. Traps that have already cost time</h2>
+
+<p>Each of these was a real defect. They are listed because the fix is invisible
+in the code that now looks obvious.</p>
+
+<h4>Bangla text arrived as mojibake</h4>
+<p>The old CSV export produced <code>&agrave;&brvbar;&laquo;&agrave;&sect;&#141;...</code> instead of Bangla
+merchant names: a CSV carries no encoding declaration, so spreadsheets guess the
+code page. XLSX stores UTF-8 inside the file. CSV was deleted rather than patched
+with a BOM, because the flat <code>=== RECEIPT SUMMARY ===</code> layout was also
+unreadable for the people approving bills. <b>Do not reintroduce it.</b></p>
+
+<h4>Cell styles vanished on write</h4>
+<p>Plain <code>xlsx</code> discards styles silently. The dependency is
+<code>xlsx-js-style</code> and must stay.</p>
+
+<h4>duplicate column name: synced_at</h4>
+<p>A <code>Promise.all</code> triggered two concurrent <code>initDatabase()</code>
+calls, running the migration twice. Fixed with a shared <code>initPromise</code>
+plus tolerance for duplicate-column errors.</p>
+
+<h4>eas update failed on a WebAssembly file</h4>
+<p><code>expo export</code> included the web platform, which pulls
+<code>wa-sqlite.wasm</code>. Fixed by pinning <code>"platforms": ["android", "ios"]</code>
+in app.json. Web is not a target.</p>
+
+<h4>EAS install failed with ERR_PNPM_IGNORED_BUILDS</h4>
+<p>pnpm 11 no longer reads the <code>pnpm</code> field in package.json, and
+<code>strictDepBuilds</code> now defaults to true. The fix lives in
+<span class="filepath">pnpm-workspace.yaml</span>:</p>
+<pre><code>allowBuilds:
+  unrs-resolver: true</code></pre>
+
+<h4>Do not add @react-navigation/* as a dependency</h4>
+<p>SDK 57 inlines React Navigation into expo-router, and the official template
+ships no <code>@react-navigation</code> dependency at all. Installing the npm copy
+alongside it produces two incompatible sets of types — its <code>pressColor</code>
+is <code>string</code>, expo-router's is <code>ColorValue</code> — and
+<code>tabBarButton</code> stops type-checking. <code>ThemeProvider</code>,
+<code>DarkTheme</code> and <code>DefaultTheme</code> come from
+<code>expo-router</code>; <code>PlatformPressable</code> and
+<code>BottomTabBarButtonProps</code> are only reachable through its build paths.</p>
+
+<h4>tsconfig has to name its @types explicitly</h4>
+<p>TypeScript 6 stopped auto-including every <code>@types/*</code> package, so
+without <code>"types": ["jest"]</code> in tsconfig the three test suites produce
+around 330 "Cannot find name 'describe'" errors. The tests themselves still run —
+only the typecheck breaks, which makes it easy to misread as a broken upgrade.</p>
+
+<h4>The ownership rule is not "empty image_uri"</h4>
+<p>It used to be, before photos synced. Now imported rows hold a bucket URL, so
+the test is a <code>file://</code> prefix. Reverting it would make a scan whose
+photo failed to upload look like someone else's row — and get it clobbered on the
+next pull.</p>
+
+<h2 class="section">10. Common changes</h2>
+
+<h4>Swap the AI model</h4>
+<p>Change the single <code>MODEL_ID</code> constant in
+<code>services/ai-vision.ts</code>. The model must support image input and JSON
+mode. Verify against a Bangla handwritten receipt before shipping — that is where
+models differ most.</p>
+
+<h4>Add a column to the exported sheet</h4>
+<p>Add an entry to <code>DEFAULT_COLUMNS</code> in <code>services/config.ts</code>,
+then handle the field in <code>formatReceiptRow</code> in
+<code>services/xlsx-export.ts</code>. Existing installs keep their stored column
+config, so a new column is off until the user enables it in Settings.</p>
+
+<h4>Add a column to the database</h4>
+<p>Guarded <code>ALTER TABLE</code> in <code>services/storage.ts</code>, mirrored
+in <code>supabase/schema.sql</code> with <code>add column if not exists</code>.
+Apply the SQL <b>before</b> shipping the app update — PostgREST rejects a payload
+naming an unknown column, which would break sync entirely rather than partially.</p>
+
+<h4>Add an icon</h4>
+<p>Add the SF Symbol name and its MaterialIcons equivalent to <code>MAPPING</code>
+in <code>components/ui/icon-symbol.tsx</code>. Typecheck enforces this.</p>
+
+<h4>Ship a change</h4>
+<p>JavaScript-only changes go over the air:</p>
+<pre><code>eas update --channel main --environment preview -p android -m "..."</code></pre>
+<p>A new native module, config plugin, or app.json native change needs a new
+build instead. Details in MAINTENANCE.md §1 and §2.</p>
+
+<h2>11. Where the documentation lives</h2>
+
+<table>
+  <thead><tr><th>Document</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><span class="filepath">docs/developer-guide.html</span></td><td>This document. How the code works and how to change it.</td></tr>
+    <tr><td><span class="filepath">docs/system-documentation.html</span></td><td>Architecture, data model, security, environments, operations.</td></tr>
+    <tr><td><span class="filepath">MAINTENANCE.md</span></td><td>Living runbook: exact commands for releases, OTA, key rotation, schema changes, release notes.</td></tr>
+    <tr><td><span class="filepath">CLAUDE.md</span></td><td>Conventions and hard rules, loaded automatically by AI agents working in the repo.</td></tr>
+    <tr><td><span class="filepath">AGENTS.md</span></td><td>Expo-specific agent guidance: documentation links, EAS workflows.</td></tr>
+    <tr><td><span class="filepath">RELEASE_NOTES.docx</span></td><td>One living release document, newest block at the top. Source: <span class="filepath">RELEASE_NOTES.html</span>.</td></tr>
+    <tr><td><span class="filepath">.kiro/specs/</span></td><td>The original monthly-export specification, kept for the reasoning behind the pivot away from Google Sheets.</td></tr>
+  </tbody>
+</table>
+
+<p>The two PDFs are generated — edit the HTML and run
+<code>docs/build-pdf.sh</code>. MAINTENANCE.md and CLAUDE.md stay markdown
+because they are edited constantly and diffs matter more than typography.</p>
+
+<footer>
+  Strativ AB &middot; AI Receipt Scanner Developer Guide &middot; 20 August 2026 &middot; Internal
+</footer>
+
+</body>
+</html>

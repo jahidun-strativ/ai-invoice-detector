@@ -1,7 +1,8 @@
 /**
  * Export Config Modal
  * Collects the four approval signatories and the cash actually drawn, then
- * generates the month's Bill Approval Sheet and opens the share sheet.
+ * generates the month's Bill Approval Sheet, then offers to share it or save
+ * it to a folder on the device.
  */
 
 import { useState } from 'react';
@@ -22,6 +23,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Type } from '@/constants/theme';
 import { useExport } from '@/contexts/export-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { deliverFile } from '@/services/export';
 import { MonthlyPeriodSummary } from '@/services/storage';
 import { SignatureConfig } from '@/services/xlsx-export';
 import { formatCurrency } from '@/utils/format';
@@ -53,7 +55,7 @@ export function ExportConfigModal({
 }) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const { generateExport, shareExport, isGenerating } = useExport();
+  const { generateExport, isGenerating } = useExport();
 
   const [signatures, setSignatures] = useState<SignatureConfig>(EMPTY_SIGNATURES);
   const [amountReceived, setAmountReceived] = useState('');
@@ -79,7 +81,7 @@ export function ExportConfigModal({
       setSignatures(EMPTY_SIGNATURES);
       setAmountReceived('');
       onClose();
-      await shareExport(filepath);
+      await deliverFile(filepath);
     } catch (error) {
       Alert.alert(
         'Export Failed',
@@ -202,7 +204,7 @@ export function ExportConfigModal({
               ) : (
                 <>
                   <IconSymbol name="square.and.arrow.up" size={20} color="#fff" />
-                  <Text style={styles.generateText}>Generate & Share</Text>
+                  <Text style={styles.generateText}>Generate Sheet</Text>
                 </>
               )}
             </TouchableOpacity>
