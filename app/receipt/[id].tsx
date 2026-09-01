@@ -15,6 +15,7 @@ import { deliverFile, exportAndShareJson } from '@/services/export';
 import { exportReceiptsAsSheet } from '@/services/xlsx-export';
 import { getReceiptById } from '@/services/storage';
 import { Receipt, ReceiptInput } from '@/types/receipt';
+import { reconcile } from '@/utils/reconcile';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { remoteImageSource } from '@/services/remote-db';
@@ -224,6 +225,8 @@ export default function ReceiptDetailScreen() {
     );
   }
 
+  const math = reconcile(receipt);
+
   return (
     <ThemedView style={styles.container}>
       <Stack.Screen
@@ -249,6 +252,32 @@ export default function ReceiptDetailScreen() {
       />
 
       <ScrollView style={styles.scrollView}>
+        {/* Amounts that do not add up — derived on render, so correcting a
+            figure clears the warning without anything to reset */}
+        {!math.ok && (
+          <View
+            style={[
+              styles.reviewBanner,
+              { backgroundColor: colors.warning + '14', borderColor: colors.warning },
+            ]}
+          >
+            <IconSymbol name="exclamationmark.triangle.fill" size={20} color={colors.warning} />
+            <View style={styles.reviewBannerText}>
+              <Text style={[styles.reviewBannerTitle, { color: colors.text }]}>
+                Check the amounts
+              </Text>
+              {math.issues.map((issue) => (
+                <Text key={issue} style={[styles.reviewBannerBody, { color: colors.textSecondary }]}>
+                  {issue}
+                </Text>
+              ))}
+              <Text style={[styles.reviewBannerBody, { color: colors.textSecondary }]}>
+                A digit may have been misread. Compare with the photo and edit if needed.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Tappable Image */}
         <TouchableOpacity
           style={styles.imageContainer}
@@ -408,6 +437,28 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  reviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    margin: 16,
+    marginBottom: 0,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  reviewBannerText: {
+    flex: 1,
+    gap: 4,
+  },
+  reviewBannerTitle: {
+    fontSize: 15,
+    fontFamily: Type.semibold,
+  },
+  reviewBannerBody: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   imageContainer: {
     height: 200,

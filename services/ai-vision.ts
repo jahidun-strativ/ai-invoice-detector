@@ -6,6 +6,7 @@ import {
   ImageProcessingResult,
   InvoiceType,
 } from "../types/receipt";
+import { reconcile, reconciliationComplaint } from "../utils/reconcile";
 
 // OpenRouter API configuration (OpenAI-compatible chat completions)
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -17,7 +18,20 @@ const TARGET_IMAGE_DIMENSION = 2048; // Target size for optimal OCR quality
 const JPEG_QUALITY = 0.92; // Higher quality for better text recognition
 const RETRY_BASE_DELAY_MS = 1000;
 const MIN_ACCEPTABLE_CONFIDENCE = 0.45;
-const MATH_TOLERANCE = 2;
+
+/**
+ * Read on the second and later attempts. Flash is fast and cheap and handles
+ * clean printed receipts; poor handwriting is where a stronger model separates
+ * from it. Escalating rather than re-asking the same model matters — a model
+ * that has just misread a digit at temperature 0 will misread it again.
+ *
+ * Costs 4.2x Flash on input and 4x on output ($1.25/$10 per M vs $0.30/$2.50,
+ * OpenRouter, checked 2026-09-01), and only the minority of scans that fail the
+ * first pass pay it — roughly a third of a US cent more on an escalated scan.
+ * If that ever matters, the cheaper lever is raising the bar for escalating,
+ * not going back to re-asking Flash.
+ */
+const FALLBACK_MODEL_ID = "google/gemini-2.5-pro";
 
 /**
  * Get OpenRouter API key from environment
@@ -155,6 +169,19 @@ Rules:
   - "unknown" if cannot determine or not a valid receipt
 - If the image is NOT a receipt/invoice, set invoice_type to "unknown" and provide a clear error_message
 - For poor handwriting: Extract best-effort values even if uncertain - it's better to have approximate data than null values
+
+BEFORE YOU ANSWER - CHECK YOUR OWN ARITHMETIC:
+A receipt is internally redundant, and that redundancy is how you catch your own
+misreadings. Once you have read every amount, verify:
+- the line item prices add up to the subtotal
+- subtotal + tax equals the total
+If they do not agree, you have almost certainly misread a digit. Go back to the
+image and re-read the amounts, looking especially at digit pairs that are easy
+to confuse in handwriting: 1/7, 0/6/9, 3/8, 5/6, and Bangla ১/৭, ০/৬, ৩/৮.
+Do NOT adjust a number to force the arithmetic to work, and do NOT invent a
+missing subtotal to make it balance - a receipt may genuinely not add up because
+of an unlisted discount or service charge. Report the amounts you can actually
+see; the check is there to make you look again, not to change the answer.
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
@@ -340,6 +367,7 @@ async function parseReceipt(
   options?: {
     prompt?: string;
     processedImage?: ImageProcessingResult;
+    model?: string;
   },
 ): Promise<AIReceiptResponse> {
   try {
@@ -360,7 +388,7 @@ async function parseReceipt(
         "X-Title": "AI Receipt Scanner",
       },
       body: JSON.stringify({
-        model: MODEL_ID,
+        model: options?.model ?? MODEL_ID,
         messages: [
           {
             role: "user",
@@ -465,13 +493,20 @@ export async function parseReceiptWithRetry(
     };
   }
 
+  // Carries the specific arithmetic failure from one attempt into the next, so
+  // the re-read is told which numbers did not add up rather than just being
+  // asked to try harder.
+  let complaint: string | null = null;
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const prompt =
+      const basePrompt =
         attempt === 1 ? EXTRACTION_PROMPT : HARD_HANDWRITING_FOLLOWUP_PROMPT;
       const result = await parseReceipt(imageUri, {
-        prompt,
+        prompt: complaint ? `${basePrompt}\n\n${complaint}` : basePrompt,
         processedImage,
+        // Escalate off Flash once it has already failed once on this image
+        model: attempt === 1 ? MODEL_ID : FALLBACK_MODEL_ID,
       });
 
       if (
@@ -481,12 +516,17 @@ export async function parseReceiptWithRetry(
         bestResult = result;
       }
 
-      if (shouldAcceptExtraction(result)) {
+      complaint = reconciliationComplaint(result);
+
+      if (shouldAcceptExtraction(result, attempt)) {
         return result;
       }
 
       lastError = new Error(
-        result.error_message || "Low-confidence extraction result",
+        result.error_message ||
+          (complaint
+            ? "Extracted amounts do not add up"
+            : "Low-confidence extraction result"),
       );
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -575,7 +615,11 @@ function normalizeResponse(response: AIReceiptResponse): AIReceiptResponse {
     hasMerchant: Boolean(response.merchant_name),
     hasItems: items.length > 0,
     hasTotal: total !== null,
-    hasMathConsistency: isMathConsistent(subtotal, tax, total),
+    // `checked &&` deliberately: a receipt with nothing to verify must not earn
+    // the consistency bonus, which is what the old subtotal===null branch did.
+    hasMathConsistency: ((r) => r.checked && r.ok)(
+      reconcile({ items, subtotal, tax, total }),
+    ),
     hasError: Boolean(response.error_message),
   });
 
@@ -677,19 +721,6 @@ function formatDate(year: string, month: string, day: string): string | null {
   return !isNaN(parsed.getTime()) ? iso : null;
 }
 
-function isMathConsistent(
-  subtotal: number | null,
-  tax: number | null,
-  total: number | null,
-): boolean {
-  if (total === null || subtotal === null) {
-    return false;
-  }
-
-  const expected = subtotal + (tax ?? 0);
-  return Math.abs(expected - total) <= MATH_TOLERANCE;
-}
-
 function calibrateConfidenceScore(input: {
   confidenceScore: number;
   hasMerchant: boolean;
@@ -710,12 +741,25 @@ function calibrateConfidenceScore(input: {
   return Math.max(0, Math.min(1, score));
 }
 
-function shouldAcceptExtraction(response: AIReceiptResponse): boolean {
+function shouldAcceptExtraction(
+  response: AIReceiptResponse,
+  attempt: number,
+): boolean {
   if (response.error_message && response.total === null) {
     return false;
   }
 
   if (response.total === null) {
+    return false;
+  }
+
+  // Amounts that do not add up mean a digit was misread — confidence says
+  // nothing about this, because the model is equally sure of a wrong digit.
+  // Only the first pass is rejected for it: plenty of real receipts genuinely
+  // do not balance (an unlisted discount, a service charge), and burning every
+  // attempt and every escalated call on those would cost money to arrive at
+  // the same answer. The second reading stands, and the UI flags it for review.
+  if (attempt === 1 && !reconcile(response).ok) {
     return false;
   }
 
@@ -735,6 +779,11 @@ function calculateExtractionScore(response: AIReceiptResponse): number {
   if (response.merchant_name) score += 10;
   if (response.receipt_date) score += 5;
   if (response.error_message) score -= 40;
+  // Weighted above merchant and date but below having a total: between two
+  // readings of the same image, the one whose amounts add up is the one whose
+  // digits were read correctly, and amounts are what the sheet is paid against.
+  const math = reconcile(response);
+  if (math.checked && math.ok) score += 30;
   return score;
 }
 
