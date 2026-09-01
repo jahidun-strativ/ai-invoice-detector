@@ -44,7 +44,38 @@ eas update --channel production --message "fix: ..."
 eas update --channel main --message "preview: ..."    # preview builds
 ```
 
-- An OTA update only reaches builds with a **matching runtime version/fingerprint**. If `eas update` warns about fingerprint mismatch, a new native build is needed first.
+- Verify afterwards with `npx eas-cli channel:view main` — the newest group should be on top, with its runtime and commit.
+- To pick an update up on a phone: force-close the app and reopen it twice. expo-updates downloads on one launch and applies on the next.
+
+**Check the fingerprint before every push.** `runtimeVersion` is
+`{"policy":"fingerprint"}`, so an update only reaches installs whose native
+fingerprint is identical to the tree you publish from. A mismatch does **not**
+error — the update publishes, reaches nobody, and reports success:
+
+```bash
+npx expo-updates fingerprint:generate --platform android   # this tree
+npx eas-cli build:list --limit 5                           # what is installed
+```
+
+If nothing installed carries that hash, a new native build is needed first
+(added or removed a native module or config plugin, or changed native config in
+`app.json`). Pure JS/TS changes always keep the fingerprint and always ship OTA.
+
+Each runtime version is served independently, which is what lets several
+generations coexist. Channel `main` currently carries both:
+
+| Runtime | Reaches |
+|---|---|
+| `1.0.0` | The old SDK 54 APKs, built under the `appVersion` policy |
+| `c900fbf7…` | SDK 57 builds, fingerprint policy |
+
+Publishing to one cannot touch the other. Before the policy switch both claimed
+`1.0.0`, and an SDK 57 bundle delivered to an SDK 54 phone would have crashed it
+on launch — see §8 of the system documentation.
+
+**`/ota [channel]`** (in `.claude/commands/`) runs all of the above as one
+gated step: commit check, typecheck/lint/tests, fingerprint match, who-it-reaches,
+publish, verify.
 
 ## 3) API Key (OpenRouter)
 
