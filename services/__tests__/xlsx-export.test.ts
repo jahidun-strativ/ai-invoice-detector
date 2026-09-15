@@ -292,6 +292,74 @@ describe('sheet formatting', () => {
     }
   );
 
+  describe('Particulars column', () => {
+    const ITEM_COLUMNS: ExportColumnConfig[] = [
+      { field: 'receipt_date', label: 'Date', enabled: true, order: 0 },
+      { field: 'items', label: 'Particulars', enabled: true, order: 1 },
+      { field: 'total', label: 'Amount', enabled: true, order: 2 },
+    ];
+    const item = (name: string) => ({ name, quantity: 1, price: 10 });
+    const withItems = (id: string, names: string[]) =>
+      receipt({ id, items: names.map(item) });
+
+    const buildItems = (receipts: Receipt[]) =>
+      buildBillApprovalSheet(
+        { ...CONFIG, receipts, columns: ITEM_COLUMNS },
+        SIGNATURES
+      ).ws;
+
+    const at = (ws: Record<string, any>, ref: string) => ws[ref]?.v;
+
+    it('stacks one item per sub-row and merges the date down over them', () => {
+      const ws = buildItems([withItems('r1', ['Cement', 'Sand', 'Rod'])]);
+      const headerRow = XLSX.utils.decode_cell(
+        cellsOf(ws).find((k) => ws[k].v === 'Particulars')!
+      ).r;
+      const first = headerRow + 1;
+
+      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: 1 }))).toBe('Cement');
+      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: 1 }))).toBe('Sand');
+      expect(at(ws, XLSX.utils.encode_cell({ r: first + 2, c: 1 }))).toBe('Rod');
+
+      // Date written once, merged over the three item rows — not repeated
+      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: 0 }))).toBe('15 Aug 2026');
+      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: 0 }))).toBe('');
+      const merge = ws['!merges'].find(
+        (m: any) => m.s.c === 0 && m.e.c === 0 && m.s.r === first
+      );
+      expect(merge.e.r).toBe(first + 2);
+
+      // The total belongs to the receipt, so it stays a single number
+      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: 2 }))).toBe(115);
+      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: 2 }))).toBe('');
+    });
+
+    it('gives the next receipt the row after the last item, not the next row', () => {
+      const ws = buildItems([
+        withItems('r1', ['Cement', 'Sand', 'Rod']),
+        withItems('r2', ['Tap']),
+      ]);
+      const dates = cellsOf(ws).filter((k) => ws[k].v === '15 Aug 2026');
+      const rows = dates.map((k) => XLSX.utils.decode_cell(k).r).sort((a, b) => a - b);
+
+      // Three item rows for the first receipt, so the second starts three below
+      expect(rows[1] - rows[0]).toBe(3);
+    });
+
+    it('takes a single row for a receipt whose items could not be read', () => {
+      const ws = buildItems([
+        withItems('r1', []),
+        withItems('r2', ['Tap']),
+      ]);
+      const rows = cellsOf(ws)
+        .filter((k) => ws[k].v === '15 Aug 2026')
+        .map((k) => XLSX.utils.decode_cell(k).r)
+        .sort((a, b) => a - b);
+
+      expect(rows[1] - rows[0]).toBe(1);
+    });
+  });
+
   it('wraps signatory text instead of clipping it in a narrow block', () => {
     const ws = build();
     const key = cellsOf(ws).find(

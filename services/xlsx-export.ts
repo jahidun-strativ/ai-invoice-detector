@@ -100,6 +100,17 @@ function titleCase(v: string): string {
 /** Columns that hold money, and therefore stay numeric in the sheet */
 const MONEY_FIELDS = new Set(["total", "tax", "subtotal"]);
 
+/**
+ * Line-item names for the Particulars column, one per sub-row. Unnamed items
+ * are dropped rather than printed as blank rows — a receipt whose items the AI
+ * could not read should take one row, not five empty ones.
+ */
+function itemNames(receipt: Receipt): string[] {
+  return (receipt.items ?? [])
+    .map((item) => item.name?.trim())
+    .filter((name): name is string => !!name);
+}
+
 function enabledColumns(columns: ExportColumnConfig[]): ExportColumnConfig[] {
   return [...columns]
     .filter((c) => c.enabled)
@@ -150,6 +161,8 @@ export function formatReceiptRow(
     } else if (field === "invoice_type" || field === "payment_method") {
       row[column.label] = titleCase((value as string) ?? "");
     } else if (field === "items") {
+      // The sheet itself ignores this and stacks the items down sub-rows (see
+      // the data table below); the joined form is for any plain-row consumer.
       row[column.label] = Array.isArray(value)
         ? value.map((i: any) => i.name).join(", ")
         : "";
@@ -235,6 +248,9 @@ export function buildBillApprovalSheet(
   const mergeRow = (row: number, from: number, to: number) => {
     merges.push({ s: { r: row, c: from }, e: { r: row, c: to } });
   };
+  const mergeColumn = (col: number, from: number, to: number) => {
+    merges.push({ s: { r: from, c: col }, e: { r: to, c: col } });
+  };
 
   // ── Header block ────────────────────────────────────────────────────────
   const paper = { fill: { fgColor: { rgb: WHITE } } };
@@ -291,32 +307,63 @@ export function buildBillApprovalSheet(
   r++;
 
   rowHeights[r] = 26;
+  const showsParticulars = columns.some((col) => col.field === "items");
+
   receipts.forEach((receipt, i) => {
     const values = formatReceiptRow(receipt, columns);
     const zebra = {
       fill: { fgColor: { rgb: i % 2 === 1 ? ZEBRA : WHITE } },
     };
 
-    columns.forEach((col, c) => {
-      const value = values[col.label];
-      const isMoney = MONEY_FIELDS.has(col.field);
-      const base = {
-        ...zebra,
-        border: BORDER,
-        alignment: {
-          horizontal: isMoney ? "right" : "left",
-          vertical: "center",
-          wrapText: false,
-        },
-      };
-      put(r, c, isMoney ? money(Number(value) || 0, base) : text(String(value ?? ""), base));
-    });
-    for (let c = columns.length; c < width; c++) {
-      put(r, c, text("", { ...zebra, border: BORDER }));
+    // One sub-row per line item, so the Particulars column reads as a list the
+    // way a hand-written bill sheet does. Every other column is written once on
+    // the receipt's first row and merged down over its items.
+    const particulars = showsParticulars ? itemNames(receipt) : [];
+    const firstRow = r;
+    const blockEnd = firstRow + Math.max(1, particulars.length) - 1;
+    const stacked = blockEnd > firstRow;
+
+    for (let row = firstRow; row <= blockEnd; row++) {
+      columns.forEach((col, c) => {
+        const isMoney = MONEY_FIELDS.has(col.field);
+        const base = {
+          ...zebra,
+          border: BORDER,
+          alignment: {
+            horizontal: isMoney ? "right" : "left",
+            // Top, not centre, once a receipt spans rows: the date should line
+            // up with the first item, not float halfway down the block.
+            vertical: stacked ? "top" : "center",
+            wrapText: false,
+          },
+        };
+        if (col.field === "items") {
+          put(row, c, text(particulars[row - firstRow] ?? "", base));
+          return;
+        }
+        if (row > firstRow) {
+          put(row, c, text("", base));
+          return;
+        }
+        const value = values[col.label];
+        put(row, c, isMoney ? money(Number(value) || 0, base) : text(String(value ?? ""), base));
+      });
+      for (let c = columns.length; c < width; c++) {
+        put(row, c, text("", { ...zebra, border: BORDER }));
+      }
     }
-    r++;
+
+    if (stacked) {
+      columns.forEach((col, c) => {
+        if (col.field !== "items") mergeColumn(c, firstRow, blockEnd);
+      });
+      for (let c = columns.length; c < width; c++) {
+        mergeColumn(c, firstRow, blockEnd);
+      }
+    }
+
+    r = blockEnd + 1;
   });
-  const lastDataRow = r - 1;
 
   r++; // spacer
 

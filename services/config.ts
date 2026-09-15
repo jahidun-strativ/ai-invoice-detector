@@ -30,13 +30,17 @@ export const DEFAULT_COLUMNS: ExportColumnConfig[] = [
   { field: "receipt_date", label: "Date", enabled: true, order: 0 },
   { field: "merchant_name", label: "Merchant", enabled: true, order: 1 },
   { field: "receipt_number", label: "Receipt #", enabled: true, order: 2 },
-  { field: "invoice_type", label: "Type", enabled: true, order: 3 },
-  { field: "total", label: "Amount", enabled: true, order: 4 },
-  { field: "currency", label: "Currency", enabled: true, order: 5 },
-  { field: "payment_method", label: "Payment Method", enabled: false, order: 6 },
-  { field: "tax", label: "Tax", enabled: false, order: 7 },
-  { field: "subtotal", label: "Subtotal", enabled: false, order: 8 },
-  { field: "items", label: "Items", enabled: false, order: 9 },
+  // Particulars renders one line item per sub-row, not a comma-joined cell —
+  // see the data table in xlsx-export.ts.
+  { field: "items", label: "Particulars", enabled: true, order: 3 },
+  { field: "invoice_type", label: "Type", enabled: true, order: 4 },
+  { field: "total", label: "Amount", enabled: true, order: 5 },
+  // Off by default: every receipt in an office is in one currency, so the
+  // column repeated "BDT" down the page and bought nothing.
+  { field: "currency", label: "Currency", enabled: false, order: 6 },
+  { field: "payment_method", label: "Payment Method", enabled: false, order: 7 },
+  { field: "tax", label: "Tax", enabled: false, order: 8 },
+  { field: "subtotal", label: "Subtotal", enabled: false, order: 9 },
 ];
 
 export async function getOfficeName(): Promise<string> {

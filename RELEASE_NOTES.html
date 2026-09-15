@@ -17,6 +17,7 @@
 <ul>
 <li>Receipt photos are now shared along with the receipt, so a scan taken on one phone can be opened and read on every other phone. Previously a colleague&rsquo;s receipt arrived with a blank thumbnail and no way to check it.</li>
 <li>Receipt amounts are now checked against each other before a scan is accepted &mdash; the line items must add up to the subtotal, and the subtotal plus tax to the total. When they do not, the receipt is read a second time by a stronger AI model, and anything still not adding up is flagged on the receipt with a note saying which figures disagree. Handwritten amounts that were read wrongly used to pass into the monthly sheet unnoticed.</li>
+<li>The monthly sheet now lists what was bought. A new <b>Particulars</b> column carries each item from a receipt on its own line, one under the other, with the date, merchant, bill number and amount held alongside them &mdash; so a bill for five items reads as five lines rather than one crowded cell. The Currency column has been switched off, since every receipt in the office is in the same currency and the column only repeated &ldquo;BDT&rdquo; down the page; it can be switched back on in Settings.</li>
 <li>An exported sheet can now be saved directly into a folder on the phone &mdash; Downloads, Google Drive, an SD card &mdash; instead of only being passed on through the share sheet. Every export now asks <i>Share</i> or <i>Save to device</i>, on the monthly sheet, the History export and a single receipt alike.</li>
 </ul>
 
@@ -32,7 +33,8 @@
 <li>App file numbers now increment automatically for internal releases, so two different builds can no longer report the same number.</li>
 <li>Saving an export uses Android&rsquo;s Storage Access Framework. The app&rsquo;s own storage is private and no file manager can open it, so the destination folder is chosen at the moment of saving; the file written there is a normal file that outlives the app.</li>
 <li>A failed scan is now re-read by a different, stronger model rather than by asking the same one again &mdash; a model that misreads a digit gives the same answer the second time. Only receipts that fail the first reading cost the higher price, roughly four times a normal scan.</li>
-<li>Test suite now at 113 tests.</li>
+<li>Existing installs are migrated on next launch: the Particulars column is added to the saved column list and Currency is switched off. Anyone who had already customised their columns keeps their own choices apart from these two.</li>
+<li>Test suite now at 116 tests.</li>
 </ul>
 
 <hr style="border: none; border-top: 0.5pt solid #E4E7EC; margin: 24pt 0 20pt 0;">
