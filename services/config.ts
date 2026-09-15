@@ -35,12 +35,11 @@ export const DEFAULT_COLUMNS: ExportColumnConfig[] = [
   { field: "items", label: "Particulars", enabled: true, order: 3 },
   { field: "invoice_type", label: "Type", enabled: true, order: 4 },
   { field: "total", label: "Amount", enabled: true, order: 5 },
-  // Off by default: every receipt in an office is in one currency, so the
-  // column repeated "BDT" down the page and bought nothing.
-  { field: "currency", label: "Currency", enabled: false, order: 6 },
-  { field: "payment_method", label: "Payment Method", enabled: false, order: 7 },
-  { field: "tax", label: "Tax", enabled: false, order: 8 },
-  { field: "subtotal", label: "Subtotal", enabled: false, order: 9 },
+  { field: "payment_method", label: "Payment Method", enabled: false, order: 6 },
+  { field: "tax", label: "Tax", enabled: false, order: 7 },
+  { field: "subtotal", label: "Subtotal", enabled: false, order: 8 },
+  // No Currency column, on purpose: an office settles in one currency, so it
+  // only repeated "BDT" down the page. The receipt still carries its currency.
 ];
 
 export async function getOfficeName(): Promise<string> {

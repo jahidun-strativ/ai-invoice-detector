@@ -160,18 +160,21 @@ export async function migrateToMonthlyExport(
         ('items', 'Particulars', 1, 3),
         ('invoice_type', 'Type', 1, 4),
         ('total', 'Amount', 1, 5),
-        ('currency', 'Currency', 0, 6),
-        ('payment_method', 'Payment Method', 1, 7),
-        ('tax', 'Tax', 0, 8),
-        ('subtotal', 'Subtotal', 0, 9);
+        ('payment_method', 'Payment Method', 1, 6),
+        ('tax', 'Tax', 0, 7),
+        ('subtotal', 'Subtotal', 0, 8);
 
       COMMIT;
     `);
 
-    // The sheet gained a Particulars column and dropped Currency. INSERT OR
-    // IGNORE above cannot touch rows an older install already seeded, so
-    // upgrade them once — keyed on Particulars being absent, which is only
-    // true of an install created before this change.
+    // The sheet dropped Currency. Unguarded: DELETE is idempotent, and the
+    // row has to go whether the install predates Particulars or only predates
+    // this change.
+    await database.runAsync("DELETE FROM export_columns WHERE field = 'currency'");
+
+    // The sheet also gained Particulars. INSERT OR IGNORE above cannot touch
+    // rows an older install already seeded, so add it once — keyed on its own
+    // absence, which is only true of an install created before this change.
     const seeded = await database.getFirstAsync(
       "SELECT 1 FROM export_columns WHERE field = 'items'",
     );
@@ -181,7 +184,6 @@ export async function migrateToMonthlyExport(
       await database.execAsync(`
         BEGIN TRANSACTION;
         UPDATE export_columns SET order_index = order_index + 1 WHERE order_index >= 3;
-        UPDATE export_columns SET enabled = 0 WHERE field = 'currency';
         INSERT INTO export_columns (field, label, enabled, order_index)
           VALUES ('items', 'Particulars', 1, 3);
         COMMIT;

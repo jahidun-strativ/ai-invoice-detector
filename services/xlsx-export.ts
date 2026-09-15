@@ -487,7 +487,6 @@ export function buildBillApprovalSheet(
     if (field === "merchant_name") return { wch: 26 };
     if (field === "items") return { wch: 34 };
     if (field === "receipt_date") return { wch: 14 };
-    if (field === "currency") return { wch: 10 };
     return { wch: 16 };
   });
   ws["!rows"] = Array.from({ length: lastRow + 1 }, (_, row) =>
