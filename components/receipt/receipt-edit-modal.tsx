@@ -23,6 +23,8 @@ import { INVOICE_TYPE_LABELS } from '@/constants/receipt-ui';
 import { Colors, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Receipt, ReceiptInput, InvoiceType, LineItem } from '@/types/receipt';
+import { formatCurrency } from '@/utils/format';
+import { lineTotal, unitPriceOf } from '@/utils/line-item';
 
 interface ReceiptEditModalProps {
   visible: boolean;
@@ -118,11 +120,36 @@ export function ReceiptEditModal({
     setFormData({ ...formData, items: updatedItems });
   };
 
+  /**
+   * Quantity and unit price are what someone types; the line total is always
+   * quantity x unit price and is never typed directly, so a corrected unit
+   * price cannot leave a stale total sitting next to it.
+   */
+  const updateItemPricing = (
+    index: number,
+    patch: { quantity?: number | null; unit_price?: number },
+  ) => {
+    setFormData((prev) => {
+      if (!prev) return prev;
+      const items = [...prev.items];
+      const unit_price = patch.unit_price ?? unitPriceOf(items[index]);
+      const quantity = patch.quantity !== undefined ? patch.quantity : items[index].quantity;
+      items[index] = {
+        ...items[index],
+        quantity,
+        unit_price,
+        price: lineTotal(quantity, unit_price),
+      };
+      // Recompute the bill only when the subtotal was derived in the first place
+      return withTotals({ ...prev, items });
+    });
+  };
+
   const addItem = () => {
     if (!formData) return;
     setFormData({
       ...formData,
-      items: [...formData.items, { name: '', quantity: null, price: 0 }],
+      items: [...formData.items, { name: '', quantity: null, price: 0, unit_price: 0 }],
     });
   };
 
@@ -409,34 +436,36 @@ export function ReceiptEditModal({
                           value={item.quantity?.toString() || ''}
                           onChangeText={(text) => {
                             const num = text ? parseFloat(text) : null;
-                            updateItem(index, 'quantity', num);
+                            updateItemPricing(index, {
+                              quantity: Number.isNaN(num) ? null : num,
+                            });
                           }}
                           keyboardType="decimal-pad"
-                          placeholder="0"
+                          placeholder="1"
                           placeholderTextColor={colors.icon}
                         />
                       </View>
 
                       <View style={[styles.inputGroup, styles.itemInputGroup]}>
-                        <Text style={[styles.label, { color: colors.icon }]}>Price</Text>
+                        <Text style={[styles.label, { color: colors.icon }]}>Unit Price</Text>
                         <TextInput
                           style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                          value={item.price.toString()}
-                          onChangeText={(text) => {
-                            const num = parseFloat(text) || 0;
-                            setFormData((prev) => {
-                              if (!prev) return prev;
-                              const items = [...prev.items];
-                              items[index] = { ...items[index], price: num };
-                              // Recompute from items only when subtotal was derived
-                              return withTotals({ ...prev, items });
-                            });
-                          }}
+                          value={unitPriceOf(item).toString()}
+                          onChangeText={(text) =>
+                            updateItemPricing(index, { unit_price: parseFloat(text) || 0 })
+                          }
                           keyboardType="decimal-pad"
                           placeholder="0.00"
                           placeholderTextColor={colors.icon}
                         />
                       </View>
+                    </View>
+
+                    <View style={[styles.itemTotalRow, { borderTopColor: colors.border }]}>
+                      <Text style={[styles.label, { color: colors.icon }]}>Item Total</Text>
+                      <Text style={[styles.itemTotalValue, { color: colors.text }]}>
+                        {formatCurrency(item.price, formData.currency)}
+                      </Text>
                     </View>
                   </View>
                 ))}
@@ -587,6 +616,18 @@ const styles = StyleSheet.create({
   itemInputGroup: {
     flex: 1,
     marginBottom: 0,
+  },
+  itemTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  itemTotalValue: {
+    fontSize: 15,
+    fontFamily: Type.semibold,
   },
   addButton: {
     flexDirection: 'row',

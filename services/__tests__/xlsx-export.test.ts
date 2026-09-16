@@ -296,9 +296,13 @@ describe('sheet formatting', () => {
     const ITEM_COLUMNS: ExportColumnConfig[] = [
       { field: 'receipt_date', label: 'Date', enabled: true, order: 0 },
       { field: 'items', label: 'Particulars', enabled: true, order: 1 },
-      { field: 'item_price', label: 'Item Price', enabled: true, order: 2 },
-      { field: 'total', label: 'Amount', enabled: true, order: 3 },
+      { field: 'item_qty', label: 'Qty', enabled: true, order: 2 },
+      { field: 'item_unit_price', label: 'Unit Price', enabled: true, order: 3 },
+      { field: 'item_price', label: 'Item Total', enabled: true, order: 4 },
+      { field: 'total', label: 'Amount', enabled: true, order: 5 },
     ];
+    const COL = Object.fromEntries(ITEM_COLUMNS.map((c, i) => [c.label, i]));
+
     const item = (name: string, price = 10) => ({ name, quantity: 1, price });
     const withItems = (id: string, names: string[]) =>
       receipt({ id, items: names.map((n) => item(n)) });
@@ -310,58 +314,109 @@ describe('sheet formatting', () => {
       ).ws;
 
     const at = (ws: Record<string, any>, ref: string) => ws[ref]?.v;
+    /** First data row: the row under the header band */
+    const firstDataRow = (ws: Record<string, any>) =>
+      XLSX.utils.decode_cell(
+        cellsOf(ws).find((k) => ws[k].v === 'Particulars')!
+      ).r + 1;
 
     it('stacks one item per sub-row and merges the date down over them', () => {
       const ws = buildItems([withItems('r1', ['Cement', 'Sand', 'Rod'])]);
-      const headerRow = XLSX.utils.decode_cell(
-        cellsOf(ws).find((k) => ws[k].v === 'Particulars')!
-      ).r;
-      const first = headerRow + 1;
+      const first = firstDataRow(ws);
+      const nameAt = (offset: number) =>
+        at(ws, XLSX.utils.encode_cell({ r: first + offset, c: COL.Particulars }));
 
-      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: 1 }))).toBe('Cement');
-      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: 1 }))).toBe('Sand');
-      expect(at(ws, XLSX.utils.encode_cell({ r: first + 2, c: 1 }))).toBe('Rod');
+      expect([0, 1, 2].map(nameAt)).toEqual(['Cement', 'Sand', 'Rod']);
 
       // Date written once, merged over the three item rows — not repeated
-      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: 0 }))).toBe('15 Aug 2026');
-      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: 0 }))).toBe('');
+      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: COL.Date }))).toBe('15 Aug 2026');
+      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: COL.Date }))).toBe('');
       const merge = ws['!merges'].find(
-        (m: any) => m.s.c === 0 && m.e.c === 0 && m.s.r === first
+        (m: any) => m.s.c === COL.Date && m.e.c === COL.Date && m.s.r === first
       );
       expect(merge.e.r).toBe(first + 2);
 
       // The total belongs to the receipt, so it stays a single number
-      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: 3 }))).toBe(115);
-      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: 3 }))).toBe('');
+      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: COL.Amount }))).toBe(115);
+      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: COL.Amount }))).toBe('');
     });
 
-    it('gives each item its own price, numeric and unmerged', () => {
+    it('gives each item its own quantity, unit price and line total', () => {
       const ws = buildItems([
         receipt({
           id: 'r1',
-          items: [item('Cement', 250), item('Sand', 80), item('Rod', 500)],
+          items: [
+            { name: 'Cement', quantity: 5, price: 1250, unit_price: 250 },
+            // No unit_price stored: it has to come back out of the line total
+            { name: 'Sand', quantity: 2, price: 160 },
+          ],
         }),
       ]);
-      const priceCol = 2;
-      const first =
-        XLSX.utils.decode_cell(
-          cellsOf(ws).find((k) => ws[k].v === 'Item Price')!
-        ).r + 1;
+      const first = firstDataRow(ws);
+      const column = (label: string) =>
+        [0, 1].map((i) => ws[XLSX.utils.encode_cell({ r: first + i, c: COL[label] })]);
 
-      const prices = [0, 1, 2].map((i) =>
-        ws[XLSX.utils.encode_cell({ r: first + i, c: priceCol })]
-      );
-      expect(prices.map((cell) => cell.v)).toEqual([250, 80, 500]);
-      // Numbers, not text — otherwise Excel cannot total the column
-      expect(prices.every((cell) => cell.t === 'n')).toBe(true);
+      expect(column('Qty').map((cell) => cell.v)).toEqual([5, 2]);
+      expect(column('Unit Price').map((cell) => cell.v)).toEqual([250, 80]);
+      expect(column('Item Total').map((cell) => cell.v)).toEqual([1250, 160]);
 
-      // The price column is never merged down; only the receipt-level ones are
-      const merged = ws['!merges'].some(
-        (m: any) => m.s.c === priceCol && m.e.r > m.s.r
-      );
-      expect(merged).toBe(false);
+      // Numbers, not text — otherwise Excel cannot total the columns
+      for (const label of ['Qty', 'Unit Price', 'Item Total']) {
+        expect(column(label).every((cell) => cell.t === 'n')).toBe(true);
+      }
+    });
+
+    // A logo design invoice has no count and no rate. Printing a quantity of 1
+    // would put a figure on a signed sheet that nobody wrote.
+    it('drops Qty and Unit Price entirely when nothing in the export used them', () => {
+      const ws = buildItems([
+        receipt({ id: 'r1', items: [{ name: 'Logo design', quantity: null, price: 12000 }] }),
+        receipt({ id: 'r2', items: [{ name: 'Internet bill', quantity: null, price: 1200 }] }),
+      ]);
+      const headers = cellsOf(ws).map((k) => ws[k].v);
+
+      expect(headers).not.toContain('Qty');
+      expect(headers).not.toContain('Unit Price');
+      // What the receipt does say is still there
+      expect(headers).toContain('Particulars');
+      expect(headers).toContain('Logo design');
+      expect(headers).toContain(12000);
+    });
+
+    // The ambiguous case: blank here could mean "the scan missed the quantity"
+    it('dashes the rows without a breakdown when other rows have one', () => {
+      const ws = buildItems([
+        receipt({
+          id: 'r1',
+          items: [
+            { name: 'Cement', quantity: 5, price: 1250 },
+            { name: 'Delivery charge', quantity: null, price: 300 },
+          ],
+        }),
+      ]);
+      const first = firstDataRow(ws);
+      const cell = (label: string, offset: number) =>
+        ws[XLSX.utils.encode_cell({ r: first + offset, c: COL[label] })];
+
+      expect(cell('Qty', 0).v).toBe(5);
+      expect(cell('Qty', 1).v).toBe('–');
+      expect(cell('Unit Price', 1).v).toBe('–');
+      // Text, so Excel's SUM over the column still works
+      expect(cell('Unit Price', 1).t).toBe('s');
+      expect(cell('Item Total', 1).v).toBe(300);
+    });
+
+    it('never merges a per-item column, only the receipt-level ones', () => {
+      const ws = buildItems([withItems('r1', ['Cement', 'Sand', 'Rod'])]);
+      const first = firstDataRow(ws);
+      const mergedDown = (c: number) =>
+        ws['!merges'].some((m: any) => m.s.c === c && m.e.r > m.s.r);
+
+      for (const label of ['Particulars', 'Qty', 'Unit Price', 'Item Total']) {
+        expect(mergedDown(COL[label])).toBe(false);
+      }
       expect(
-        ws['!merges'].some((m: any) => m.s.c === 3 && m.e.r === first + 2)
+        ws['!merges'].some((m: any) => m.s.c === COL.Amount && m.e.r === first + 2)
       ).toBe(true);
     });
 

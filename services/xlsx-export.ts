@@ -13,6 +13,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import XLSX from "xlsx-js-style";
 import { LineItem, Receipt } from "@/types/receipt";
+import { hasBreakdown, quantityOf, unitPriceOf } from "@/utils/line-item";
 import { getColumns, getOfficeName } from "./config";
 import { ExportColumnConfig, formatMonthlyPeriod } from "./storage";
 
@@ -98,14 +99,35 @@ function titleCase(v: string): string {
 }
 
 /** Columns that hold money, and therefore stay numeric in the sheet */
-const MONEY_FIELDS = new Set(["total", "tax", "subtotal", "item_price"]);
+const MONEY_FIELDS = new Set([
+  "total",
+  "tax",
+  "subtotal",
+  "item_price",
+  "item_unit_price",
+]);
 
 /**
- * The two columns written once per line item instead of once per receipt, and
- * so never merged down the block. Neither is a field on Receipt — they are
- * drawn straight from `receipt.items` by the data table.
+ * The columns written once per line item instead of once per receipt, and so
+ * never merged down the block. None of them is a field on Receipt — all four
+ * are drawn straight off `receipt.items` by the data table.
  */
-const ITEM_FIELDS = new Set(["items", "item_price"]);
+const ITEM_FIELDS = new Set([
+  "items",
+  "item_qty",
+  "item_unit_price",
+  "item_price",
+]);
+
+/** The two of those that only exist when a receipt split a line into count x rate */
+const BREAKDOWN_FIELDS = new Set(["item_qty", "item_unit_price"]);
+
+/**
+ * En dash for a figure the receipt deliberately did not state — the accounting
+ * convention, and unambiguous next to an empty cell, which reads as an
+ * oversight. Text, so Excel's SUM skips it and the column still totals.
+ */
+const BLANK_FIGURE = "–";
 
 /**
  * Line items for the stacked sub-rows. Unnamed items are dropped rather than
@@ -114,6 +136,11 @@ const ITEM_FIELDS = new Set(["items", "item_price"]);
  */
 function lineItems(receipt: Receipt): LineItem[] {
   return (receipt.items ?? []).filter((item) => item.name?.trim());
+}
+
+/** Plain number cell — quantities are counts, not money */
+function count(v: number, style?: any): Cell {
+  return { v, t: "n", s: style };
 }
 
 function enabledColumns(columns: ExportColumnConfig[]): ExportColumnConfig[] {
@@ -231,10 +258,25 @@ export function buildBillApprovalSheet(
     throw new Error("No receipts found for this period.");
   }
 
-  const columns = enabledColumns(config.columns);
-  if (columns.length === 0) {
+  const enabled = enabledColumns(config.columns);
+  if (enabled.length === 0) {
     throw new Error("No export columns are enabled. Check Settings.");
   }
+
+  // Qty and Unit Price earn their width only if something in this export
+  // actually used them. A month of service invoices — a logo design, a repair,
+  // an internet bill — would otherwise carry two columns blank top to bottom.
+  // Where they do appear, a row that lacks a breakdown gets BLANK_FIGURE rather
+  // than an empty cell, so the approver can tell "the receipt stated no
+  // quantity" from "the scan missed it".
+  const anyBreakdown = receipts.some((receipt) =>
+    lineItems(receipt).some(hasBreakdown),
+  );
+  const kept = anyBreakdown
+    ? enabled
+    : enabled.filter((col) => !BREAKDOWN_FIELDS.has(col.field));
+  // Only if someone enabled nothing but those two, which would print no sheet
+  const columns = kept.length > 0 ? kept : enabled;
 
   // The signature block needs four columns; widen the sheet if the table is
   // narrower so the blocks never collide.
@@ -336,7 +378,7 @@ export function buildBillApprovalSheet(
           ...zebra,
           border: BORDER,
           alignment: {
-            horizontal: isMoney ? "right" : "left",
+            horizontal: isMoney || col.field === "item_qty" ? "right" : "left",
             // Top, not centre, once a receipt spans rows: the date should line
             // up with the first item, not float halfway down the block.
             vertical: stacked ? "top" : "center",
@@ -349,6 +391,15 @@ export function buildBillApprovalSheet(
             put(row, c, text("", base));
           } else if (col.field === "items") {
             put(row, c, text(item.name.trim(), base));
+          } else if (col.field === "item_qty") {
+            // A dash, never 1: see hasBreakdown in utils/line-item.ts
+            put(row, c, hasBreakdown(item)
+              ? count(quantityOf(item), base)
+              : text(BLANK_FIGURE, base));
+          } else if (col.field === "item_unit_price") {
+            put(row, c, hasBreakdown(item)
+              ? money(unitPriceOf(item), base)
+              : text(BLANK_FIGURE, base));
           } else {
             put(row, c, money(item.price ?? 0, base));
           }
@@ -500,6 +551,7 @@ export function buildBillApprovalSheet(
     if (field === "merchant_name") return { wch: 26 };
     if (field === "items") return { wch: 34 };
     if (field === "receipt_date") return { wch: 14 };
+    if (field === "item_qty") return { wch: 7 };
     return { wch: 16 };
   });
   ws["!rows"] = Array.from({ length: lastRow + 1 }, (_, row) =>

@@ -158,12 +158,14 @@ export async function migrateToMonthlyExport(
         ('merchant_name', 'Merchant', 1, 1),
         ('receipt_number', 'Receipt #', 1, 2),
         ('items', 'Particulars', 1, 3),
-        ('item_price', 'Item Price', 1, 4),
-        ('invoice_type', 'Type', 1, 5),
-        ('total', 'Amount', 1, 6),
-        ('payment_method', 'Payment Method', 1, 7),
-        ('tax', 'Tax', 0, 8),
-        ('subtotal', 'Subtotal', 0, 9);
+        ('item_qty', 'Qty', 1, 4),
+        ('item_unit_price', 'Unit Price', 1, 5),
+        ('item_price', 'Item Total', 1, 6),
+        ('invoice_type', 'Type', 1, 7),
+        ('total', 'Amount', 1, 8),
+        ('payment_method', 'Payment Method', 1, 9),
+        ('tax', 'Tax', 0, 10),
+        ('subtotal', 'Subtotal', 0, 11);
 
       COMMIT;
     `);
@@ -197,7 +199,14 @@ export async function migrateToMonthlyExport(
       );
     };
     await addColumn("items", "Particulars", 3);
-    await addColumn("item_price", "Item Price", 4);
+    await addColumn("item_price", "Item Total", 4);
+    await addColumn("item_qty", "Qty", 4);
+    await addColumn("item_unit_price", "Unit Price", 5);
+    // Item Price shipped before the quantity split, when it was the only
+    // per-item figure. Idempotent, and labels are not user-editable.
+    await database.runAsync(
+      "UPDATE export_columns SET label = 'Item Total' WHERE field = 'item_price'",
+    );
 
     // Track which receipts reached the remote database. SQLite has no
     // "ADD COLUMN IF NOT EXISTS", so check the table first — this runs on
