@@ -296,11 +296,12 @@ describe('sheet formatting', () => {
     const ITEM_COLUMNS: ExportColumnConfig[] = [
       { field: 'receipt_date', label: 'Date', enabled: true, order: 0 },
       { field: 'items', label: 'Particulars', enabled: true, order: 1 },
-      { field: 'total', label: 'Amount', enabled: true, order: 2 },
+      { field: 'item_price', label: 'Item Price', enabled: true, order: 2 },
+      { field: 'total', label: 'Amount', enabled: true, order: 3 },
     ];
-    const item = (name: string) => ({ name, quantity: 1, price: 10 });
+    const item = (name: string, price = 10) => ({ name, quantity: 1, price });
     const withItems = (id: string, names: string[]) =>
-      receipt({ id, items: names.map(item) });
+      receipt({ id, items: names.map((n) => item(n)) });
 
     const buildItems = (receipts: Receipt[]) =>
       buildBillApprovalSheet(
@@ -330,8 +331,38 @@ describe('sheet formatting', () => {
       expect(merge.e.r).toBe(first + 2);
 
       // The total belongs to the receipt, so it stays a single number
-      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: 2 }))).toBe(115);
-      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: 2 }))).toBe('');
+      expect(at(ws, XLSX.utils.encode_cell({ r: first, c: 3 }))).toBe(115);
+      expect(at(ws, XLSX.utils.encode_cell({ r: first + 1, c: 3 }))).toBe('');
+    });
+
+    it('gives each item its own price, numeric and unmerged', () => {
+      const ws = buildItems([
+        receipt({
+          id: 'r1',
+          items: [item('Cement', 250), item('Sand', 80), item('Rod', 500)],
+        }),
+      ]);
+      const priceCol = 2;
+      const first =
+        XLSX.utils.decode_cell(
+          cellsOf(ws).find((k) => ws[k].v === 'Item Price')!
+        ).r + 1;
+
+      const prices = [0, 1, 2].map((i) =>
+        ws[XLSX.utils.encode_cell({ r: first + i, c: priceCol })]
+      );
+      expect(prices.map((cell) => cell.v)).toEqual([250, 80, 500]);
+      // Numbers, not text — otherwise Excel cannot total the column
+      expect(prices.every((cell) => cell.t === 'n')).toBe(true);
+
+      // The price column is never merged down; only the receipt-level ones are
+      const merged = ws['!merges'].some(
+        (m: any) => m.s.c === priceCol && m.e.r > m.s.r
+      );
+      expect(merged).toBe(false);
+      expect(
+        ws['!merges'].some((m: any) => m.s.c === 3 && m.e.r === first + 2)
+      ).toBe(true);
     });
 
     it('gives the next receipt the row after the last item, not the next row', () => {

@@ -12,7 +12,7 @@
 
 import * as FileSystem from "expo-file-system/legacy";
 import XLSX from "xlsx-js-style";
-import { Receipt } from "@/types/receipt";
+import { LineItem, Receipt } from "@/types/receipt";
 import { getColumns, getOfficeName } from "./config";
 import { ExportColumnConfig, formatMonthlyPeriod } from "./storage";
 
@@ -98,17 +98,22 @@ function titleCase(v: string): string {
 }
 
 /** Columns that hold money, and therefore stay numeric in the sheet */
-const MONEY_FIELDS = new Set(["total", "tax", "subtotal"]);
+const MONEY_FIELDS = new Set(["total", "tax", "subtotal", "item_price"]);
 
 /**
- * Line-item names for the Particulars column, one per sub-row. Unnamed items
- * are dropped rather than printed as blank rows — a receipt whose items the AI
- * could not read should take one row, not five empty ones.
+ * The two columns written once per line item instead of once per receipt, and
+ * so never merged down the block. Neither is a field on Receipt — they are
+ * drawn straight from `receipt.items` by the data table.
  */
-function itemNames(receipt: Receipt): string[] {
-  return (receipt.items ?? [])
-    .map((item) => item.name?.trim())
-    .filter((name): name is string => !!name);
+const ITEM_FIELDS = new Set(["items", "item_price"]);
+
+/**
+ * Line items for the stacked sub-rows. Unnamed items are dropped rather than
+ * printed as blank rows — a receipt whose items the AI could not read should
+ * take one row, not five empty ones.
+ */
+function lineItems(receipt: Receipt): LineItem[] {
+  return (receipt.items ?? []).filter((item) => item.name?.trim());
 }
 
 function enabledColumns(columns: ExportColumnConfig[]): ExportColumnConfig[] {
@@ -154,18 +159,19 @@ export function formatReceiptRow(
     const field = column.field as keyof Receipt;
     const value = receipt[field];
 
-    if (field === "receipt_date") {
+    if (ITEM_FIELDS.has(column.field)) {
+      // Not a Receipt field. The sheet stacks these down sub-rows (see the data
+      // table below); the joined names are here for any plain-row consumer.
+      row[column.label] =
+        column.field === "items"
+          ? lineItems(receipt).map((item) => item.name.trim()).join(", ")
+          : "";
+    } else if (field === "receipt_date") {
       row[column.label] = displayDate(value as string | null);
     } else if (MONEY_FIELDS.has(field)) {
       row[column.label] = typeof value === "number" ? value : 0;
     } else if (field === "invoice_type" || field === "payment_method") {
       row[column.label] = titleCase((value as string) ?? "");
-    } else if (field === "items") {
-      // The sheet itself ignores this and stacks the items down sub-rows (see
-      // the data table below); the joined form is for any plain-row consumer.
-      row[column.label] = Array.isArray(value)
-        ? value.map((i: any) => i.name).join(", ")
-        : "";
     } else {
       row[column.label] = value ?? "";
     }
@@ -307,7 +313,7 @@ export function buildBillApprovalSheet(
   r++;
 
   rowHeights[r] = 26;
-  const showsParticulars = columns.some((col) => col.field === "items");
+  const stacksItems = columns.some((col) => ITEM_FIELDS.has(col.field));
 
   receipts.forEach((receipt, i) => {
     const values = formatReceiptRow(receipt, columns);
@@ -315,12 +321,12 @@ export function buildBillApprovalSheet(
       fill: { fgColor: { rgb: i % 2 === 1 ? ZEBRA : WHITE } },
     };
 
-    // One sub-row per line item, so the Particulars column reads as a list the
-    // way a hand-written bill sheet does. Every other column is written once on
-    // the receipt's first row and merged down over its items.
-    const particulars = showsParticulars ? itemNames(receipt) : [];
+    // One sub-row per line item, so Particulars and its price read as a list
+    // the way a hand-written bill sheet does. Every other column — the receipt
+    // total included — is written once on the first row and merged down.
+    const items = stacksItems ? lineItems(receipt) : [];
     const firstRow = r;
-    const blockEnd = firstRow + Math.max(1, particulars.length) - 1;
+    const blockEnd = firstRow + Math.max(1, items.length) - 1;
     const stacked = blockEnd > firstRow;
 
     for (let row = firstRow; row <= blockEnd; row++) {
@@ -337,8 +343,15 @@ export function buildBillApprovalSheet(
             wrapText: false,
           },
         };
-        if (col.field === "items") {
-          put(row, c, text(particulars[row - firstRow] ?? "", base));
+        if (ITEM_FIELDS.has(col.field)) {
+          const item = items[row - firstRow];
+          if (!item) {
+            put(row, c, text("", base));
+          } else if (col.field === "items") {
+            put(row, c, text(item.name.trim(), base));
+          } else {
+            put(row, c, money(item.price ?? 0, base));
+          }
           return;
         }
         if (row > firstRow) {
@@ -355,7 +368,7 @@ export function buildBillApprovalSheet(
 
     if (stacked) {
       columns.forEach((col, c) => {
-        if (col.field !== "items") mergeColumn(c, firstRow, blockEnd);
+        if (!ITEM_FIELDS.has(col.field)) mergeColumn(c, firstRow, blockEnd);
       });
       for (let c = columns.length; c < width; c++) {
         mergeColumn(c, firstRow, blockEnd);

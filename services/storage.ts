@@ -158,11 +158,12 @@ export async function migrateToMonthlyExport(
         ('merchant_name', 'Merchant', 1, 1),
         ('receipt_number', 'Receipt #', 1, 2),
         ('items', 'Particulars', 1, 3),
-        ('invoice_type', 'Type', 1, 4),
-        ('total', 'Amount', 1, 5),
-        ('payment_method', 'Payment Method', 1, 6),
-        ('tax', 'Tax', 0, 7),
-        ('subtotal', 'Subtotal', 0, 8);
+        ('item_price', 'Item Price', 1, 4),
+        ('invoice_type', 'Type', 1, 5),
+        ('total', 'Amount', 1, 6),
+        ('payment_method', 'Payment Method', 1, 7),
+        ('tax', 'Tax', 0, 8),
+        ('subtotal', 'Subtotal', 0, 9);
 
       COMMIT;
     `);
@@ -172,23 +173,31 @@ export async function migrateToMonthlyExport(
     // this change.
     await database.runAsync("DELETE FROM export_columns WHERE field = 'currency'");
 
-    // The sheet also gained Particulars. INSERT OR IGNORE above cannot touch
-    // rows an older install already seeded, so add it once — keyed on its own
-    // absence, which is only true of an install created before this change.
-    const seeded = await database.getFirstAsync(
-      "SELECT 1 FROM export_columns WHERE field = 'items'",
-    );
-    if (!seeded) {
-      // Shift rather than renumber: someone who reordered their columns in
-      // Settings keeps that order, with Particulars slotted in after Receipt #.
-      await database.execAsync(`
-        BEGIN TRANSACTION;
-        UPDATE export_columns SET order_index = order_index + 1 WHERE order_index >= 3;
-        INSERT INTO export_columns (field, label, enabled, order_index)
-          VALUES ('items', 'Particulars', 1, 3);
-        COMMIT;
-      `);
-    }
+    // The sheet also gained Particulars and Item Price. INSERT OR IGNORE above
+    // cannot touch rows an older install already seeded, so add each once,
+    // keyed on its own absence. Shifting rather than renumbering means someone
+    // who reordered their columns in Settings keeps that order.
+    const addColumn = async (field: string, label: string, at: number) => {
+      const present = await database.getFirstAsync(
+        "SELECT 1 FROM export_columns WHERE field = ?",
+        [field],
+      );
+      if (present) return;
+      // Not one transaction: execAsync takes no parameters and these values
+      // would have to be interpolated. A crash between the two leaves a gap in
+      // order_index, which nothing reads — the order is relative, and
+      // setExportColumns renumbers it densely on the next save.
+      await database.runAsync(
+        "UPDATE export_columns SET order_index = order_index + 1 WHERE order_index >= ?",
+        [at],
+      );
+      await database.runAsync(
+        "INSERT INTO export_columns (field, label, enabled, order_index) VALUES (?, ?, 1, ?)",
+        [field, label, at],
+      );
+    };
+    await addColumn("items", "Particulars", 3);
+    await addColumn("item_price", "Item Price", 4);
 
     // Track which receipts reached the remote database. SQLite has no
     // "ADD COLUMN IF NOT EXISTS", so check the table first — this runs on

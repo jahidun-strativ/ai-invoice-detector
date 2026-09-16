@@ -30,14 +30,16 @@ export const DEFAULT_COLUMNS: ExportColumnConfig[] = [
   { field: "receipt_date", label: "Date", enabled: true, order: 0 },
   { field: "merchant_name", label: "Merchant", enabled: true, order: 1 },
   { field: "receipt_number", label: "Receipt #", enabled: true, order: 2 },
-  // Particulars renders one line item per sub-row, not a comma-joined cell —
-  // see the data table in xlsx-export.ts.
+  // Particulars and Item Price render one line item per sub-row, not a
+  // comma-joined cell — see the data table in xlsx-export.ts. Item Price is
+  // per item; Amount below stays the receipt's total.
   { field: "items", label: "Particulars", enabled: true, order: 3 },
-  { field: "invoice_type", label: "Type", enabled: true, order: 4 },
-  { field: "total", label: "Amount", enabled: true, order: 5 },
-  { field: "payment_method", label: "Payment Method", enabled: false, order: 6 },
-  { field: "tax", label: "Tax", enabled: false, order: 7 },
-  { field: "subtotal", label: "Subtotal", enabled: false, order: 8 },
+  { field: "item_price", label: "Item Price", enabled: true, order: 4 },
+  { field: "invoice_type", label: "Type", enabled: true, order: 5 },
+  { field: "total", label: "Amount", enabled: true, order: 6 },
+  { field: "payment_method", label: "Payment Method", enabled: false, order: 7 },
+  { field: "tax", label: "Tax", enabled: false, order: 8 },
+  { field: "subtotal", label: "Subtotal", enabled: false, order: 9 },
   // No Currency column, on purpose: an office settles in one currency, so it
   // only repeated "BDT" down the page. The receipt still carries its currency.
 ];
